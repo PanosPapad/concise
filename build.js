@@ -20,6 +20,10 @@ async function build() {
     path.resolve(__dirname, "src/popup/index.html"),
     path.resolve(distDir, "popup/index.html")
   );
+  copyFile(
+    path.resolve(__dirname, "src/dashboard/index.html"),
+    path.resolve(distDir, "dashboard/index.html")
+  );
 
   // Popup bundle
   const popupOptions = {
@@ -27,6 +31,16 @@ async function build() {
     bundle: true,
     format: "iife",
     outfile: "dist/popup/index.js",
+    jsx: "automatic",
+    jsxImportSource: "preact",
+  };
+
+  // Dashboard bundle
+  const dashboardOptions = {
+    entryPoints: ["src/dashboard/index.tsx"],
+    bundle: true,
+    format: "iife",
+    outfile: "dist/dashboard/index.js",
     jsx: "automatic",
     jsxImportSource: "preact",
   };
@@ -41,11 +55,12 @@ async function build() {
 
   if (watch) {
     const popupCtx = await esbuild.context(popupOptions);
+    const dashboardCtx = await esbuild.context(dashboardOptions);
     const swCtx = await esbuild.context(swOptions);
-    await Promise.all([popupCtx.watch(), swCtx.watch()]);
+    await Promise.all([popupCtx.watch(), dashboardCtx.watch(), swCtx.watch()]);
     console.log("Watching for changes...");
   } else {
-    await Promise.all([esbuild.build(popupOptions), esbuild.build(swOptions)]);
+    await Promise.all([esbuild.build(popupOptions), esbuild.build(dashboardOptions), esbuild.build(swOptions)]);
     console.log("Build complete.");
   }
 }
