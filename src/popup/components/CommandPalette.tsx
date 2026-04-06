@@ -134,9 +134,13 @@ export function CommandPalette({ workspaces, onClose, onRefresh }: Props) {
         await switchToWorkspace(ws.id);
         if (result.tabIndex !== undefined) {
           try {
-            const tabs = await chrome.tabs.query({ windowId: ws.windowId! });
-            if (tabs[result.tabIndex]?.id) {
-              await chrome.tabs.update(tabs[result.tabIndex].id!, { active: true });
+            const targetUrl = ws.tabs[result.tabIndex]?.url;
+            if (targetUrl) {
+              const tabs = await chrome.tabs.query({ windowId: ws.windowId! });
+              const match = tabs.find((t) => t.url === targetUrl);
+              if (match?.id) {
+                await chrome.tabs.update(match.id, { active: true });
+              }
             }
           } catch {
             // Best-effort tab activation; ignore if it fails

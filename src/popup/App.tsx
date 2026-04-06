@@ -1,6 +1,7 @@
-import { useState, useEffect } from "preact/hooks";
-import { Workspace } from "../shared/types";
-import { getWorkspaceList } from "../shared/workspace-manager";
+import { useState, useEffect, useRef } from "preact/hooks";
+import { Workspace, UntrackedWindow } from "../shared/types";
+import { getWorkspaceList, getUntrackedWindows } from "../shared/workspace-manager";
+import { exportData, importData } from "../shared/storage";
 import { WorkspaceList } from "./components/WorkspaceList";
 import { CreateWorkspace } from "./components/CreateWorkspace";
 import { CommandPalette } from "./components/CommandPalette";
@@ -51,17 +52,39 @@ const styles = {
   body: {
     padding: "8px 12px 12px",
   },
+  footer: {
+    display: "flex",
+    justifyContent: "center",
+    gap: "8px",
+    padding: "8px 16px 12px",
+    borderTop: "1px solid #0f3460",
+  },
+  footerBtn: {
+    fontSize: "11px",
+    padding: "4px 12px",
+    borderRadius: "4px",
+    border: "1px solid #0f3460",
+    backgroundColor: "transparent",
+    color: "#8888a0",
+    cursor: "pointer",
+  },
 };
 
 export function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [untrackedWindows, setUntrackedWindows] = useState<UntrackedWindow[]>([]);
   const [creating, setCreating] = useState(false);
   const [currentWindowId, setCurrentWindowId] = useState<number | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
-    const list = await getWorkspaceList();
+    const [list, untracked] = await Promise.all([
+      getWorkspaceList(),
+      getUntrackedWindows(),
+    ]);
     setWorkspaces(list);
+    setUntrackedWindows(untracked);
   };
 
   useEffect(() => {
@@ -85,6 +108,43 @@ export function App() {
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, []);
+
+  const handleExport = async () => {
+    const json = await exportData();
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const date = new Date().toISOString().split("T")[0];
+    a.href = url;
+    a.download = `manama-backup-${date}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        await importData(reader.result as string);
+        await loadData();
+      } catch (err) {
+        window.alert(
+          err instanceof Error ? err.message : "Failed to import",
+        );
+      }
+    };
+    reader.readAsText(file);
+    // Reset input so the same file can be re-selected
+    input.value = "";
+  };
 
   return (
     <div style={styles.container}>
@@ -111,8 +171,24 @@ export function App() {
         )}
         <WorkspaceList
           workspaces={workspaces}
+          untrackedWindows={untrackedWindows}
           currentWindowId={currentWindowId}
           onRefresh={loadData}
+        />
+      </div>
+      <div style={styles.footer}>
+        <button style={styles.footerBtn} onClick={handleExport}>
+          Export
+        </button>
+        <button style={styles.footerBtn} onClick={handleImport}>
+          Import
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          style={{ display: "none" }}
+          onChange={handleFileSelected}
         />
       </div>
       {paletteOpen && (

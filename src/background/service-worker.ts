@@ -15,9 +15,7 @@ const pendingSnapshots = new Map<number, ReturnType<typeof setTimeout>>();
 
 function debouncedSnapshotForWindow(windowId: number): void {
   const existing = pendingSnapshots.get(windowId);
-  if (existing) {
-    clearTimeout(existing);
-  }
+  if (existing) clearTimeout(existing);
 
   const timeout = setTimeout(() => {
     pendingSnapshots.delete(windowId);
@@ -47,9 +45,8 @@ async function syncTabsForWindow(windowId: number): Promise<void> {
     if (!result) return;
 
     const { workspace } = result;
-    const tabs = await snapshotTabs(windowId);
+    const tabs = await snapshotTabs(windowId, workspace.tabs);
 
-    // Re-read storage after async work to guard against interleaved writes
     const freshWorkspaces = await getAllWorkspaces();
     const freshWorkspace = freshWorkspaces[workspace.id];
     if (!freshWorkspace || freshWorkspace.windowId !== windowId) return;
@@ -62,10 +59,9 @@ async function syncTabsForWindow(windowId: number): Promise<void> {
   }
 }
 
-// --- 1. Window close handler ---
+// --- Window close handler ---
 
 chrome.windows.onRemoved.addListener(async (windowId: number) => {
-  // Clear any pending debounce for this window before async work
   const pending = pendingSnapshots.get(windowId);
   if (pending) {
     clearTimeout(pending);
@@ -85,19 +81,14 @@ chrome.windows.onRemoved.addListener(async (windowId: number) => {
   }
 });
 
-// --- 2. Tab change sync ---
+// --- Tab change sync ---
 
 chrome.tabs.onCreated.addListener((tab) => {
-  if (tab.windowId !== undefined) {
-    debouncedSnapshotForWindow(tab.windowId);
-  }
+  if (tab.windowId !== undefined) debouncedSnapshotForWindow(tab.windowId);
 });
 
 chrome.tabs.onRemoved.addListener((_tabId, removeInfo) => {
-  // Don't sync if the entire window is closing -- onRemoved handler covers that
-  if (!removeInfo.isWindowClosing) {
-    debouncedSnapshotForWindow(removeInfo.windowId);
-  }
+  if (!removeInfo.isWindowClosing) debouncedSnapshotForWindow(removeInfo.windowId);
 });
 
 chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
@@ -118,13 +109,37 @@ chrome.tabs.onAttached.addListener((_tabId, attachInfo) => {
   debouncedSnapshotForWindow(attachInfo.newWindowId);
 });
 
-// --- 4. Extension install handler ---
+// --- Tab activation tracking (stale tab indicators) ---
+
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const result = await findWorkspaceByWindowId(activeInfo.windowId);
+    if (!result) return;
+
+    const { workspace, allWorkspaces } = result;
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    const url = tab.url ?? '';
+
+    if (!url || url.startsWith('chrome://') || url.startsWith('chrome-extension://')) return;
+
+    const matchIdx = workspace.tabs.findIndex((t) => t.url === url);
+    if (matchIdx !== -1) {
+      workspace.tabs[matchIdx].lastActivatedAt = Date.now();
+      allWorkspaces[workspace.id] = workspace;
+      await saveAllWorkspaces(allWorkspaces);
+    }
+  } catch (error) {
+    console.error('[Manama] Failed to track tab activation:', error);
+  }
+});
+
+// --- Extension install handler ---
 
 chrome.runtime.onInstalled.addListener((details) => {
   console.log(`[Manama] Extension ${details.reason}: version ${chrome.runtime.getManifest().version}`);
 });
 
-// --- 5. Message handler ---
+// --- Message handler ---
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === 'getWorkspaces') {
@@ -132,7 +147,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       console.error('[Manama] Failed to get workspaces:', error);
       sendResponse([]);
     });
-    return true; // keep message channel open for async response
+    return true;
   }
 
   if (message.action === 'refreshWorkspace' && message.workspaceId) {
@@ -143,8 +158,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           sendResponse(workspace);
           return;
         }
-
-        const tabs = await snapshotTabs(workspace.windowId);
+        const tabs = await snapshotTabs(workspace.windowId, workspace.tabs);
         workspace.tabs = tabs;
         await saveWorkspace(workspace);
         sendResponse(workspace);

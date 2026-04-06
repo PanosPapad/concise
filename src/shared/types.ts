@@ -3,6 +3,7 @@ export interface SavedTab {
   title: string;
   favIconUrl?: string;
   pinned: boolean;
+  lastActivatedAt?: number;
 }
 
 export interface Workspace {
@@ -13,6 +14,12 @@ export interface Workspace {
   tabs: SavedTab[];
   createdAt: number;
   lastAccessedAt: number;
+  sortOrder: number;
+}
+
+export interface UntrackedWindow {
+  windowId: number;
+  tabs: SavedTab[];
 }
 
 export const WORKSPACE_COLORS = [
