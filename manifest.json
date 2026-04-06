@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Manama - Tab Organiser",
+  "description": "Named workspaces for Chrome windows",
+  "version": "0.1.0",
+  "permissions": ["tabs", "storage", "windows"],
+  "action": {
+    "default_popup": "popup/index.html"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "icons": {},
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
+      },
+      "description": "Open Manama"
+    }
+  }
+}
