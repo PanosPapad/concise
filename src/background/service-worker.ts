@@ -7,7 +7,7 @@ import {
 } from '../shared/storage';
 import { snapshotTabs, getWorkspaceList } from '../shared/workspace-manager';
 
-console.log('Manama service worker loaded');
+console.log('Concise service worker loaded');
 
 // --- Dashboard tab management ---
 
@@ -17,10 +17,23 @@ async function openOrFocusDashboard(): Promise<void> {
   const extensionUrl = chrome.runtime.getURL(DASHBOARD_PATH);
   const tabs = await chrome.tabs.query({ url: extensionUrl });
 
-  if (tabs.length > 0 && tabs[0].id !== undefined) {
-    await chrome.tabs.update(tabs[0].id, { active: true });
-    if (tabs[0].windowId !== undefined) {
-      await chrome.windows.update(tabs[0].windowId, { focused: true });
+  if (tabs.length > 0) {
+    const primary = tabs[0];
+    // Close any accidental duplicate dashboard tabs
+    for (let i = 1; i < tabs.length; i++) {
+      if (tabs[i].id !== undefined) {
+        try {
+          await chrome.tabs.remove(tabs[i].id!);
+        } catch {
+          // Tab may already be closing
+        }
+      }
+    }
+    if (primary.id !== undefined) {
+      await chrome.tabs.update(primary.id, { active: true });
+    }
+    if (primary.windowId !== undefined) {
+      await chrome.windows.update(primary.windowId, { focused: true });
     }
   } else {
     await chrome.tabs.create({ url: extensionUrl });
@@ -31,7 +44,7 @@ chrome.action.onClicked.addListener(async () => {
   try {
     await openOrFocusDashboard();
   } catch (error) {
-    console.error('[Manama] Failed to open or focus dashboard:', error);
+    console.error('[Concise] Failed to open or focus dashboard:', error);
   }
 });
 
@@ -81,7 +94,7 @@ async function syncTabsForWindow(windowId: number): Promise<void> {
     freshWorkspaces[workspace.id] = freshWorkspace;
     await saveAllWorkspaces(freshWorkspaces);
   } catch (error) {
-    console.error(`[Manama] Failed to sync tabs for window ${windowId}:`, error);
+    console.error(`[Concise] Failed to sync tabs for window ${windowId}:`, error);
   }
 }
 
@@ -103,7 +116,7 @@ chrome.windows.onRemoved.addListener(async (windowId: number) => {
     allWorkspaces[workspace.id] = workspace;
     await saveAllWorkspaces(allWorkspaces);
   } catch (error) {
-    console.error(`[Manama] Failed to handle window removal for ${windowId}:`, error);
+    console.error(`[Concise] Failed to handle window removal for ${windowId}:`, error);
   }
 });
 
@@ -160,14 +173,14 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
       await saveAllWorkspaces(allWorkspaces);
     }
   } catch (error) {
-    console.error('[Manama] Failed to track tab activation:', error);
+    console.error('[Concise] Failed to track tab activation:', error);
   }
 });
 
 // --- Extension install handler ---
 
 chrome.runtime.onInstalled.addListener((details) => {
-  console.log(`[Manama] Extension ${details.reason}: version ${chrome.runtime.getManifest().version}`);
+  console.log(`[Concise] Extension ${details.reason}: version ${chrome.runtime.getManifest().version}`);
 });
 
 // --- Message handler ---
@@ -175,7 +188,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === 'getWorkspaces') {
     getWorkspaceList().then(sendResponse).catch((error) => {
-      console.error('[Manama] Failed to get workspaces:', error);
+      console.error('[Concise] Failed to get workspaces:', error);
       sendResponse([]);
     });
     return true;
@@ -194,7 +207,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         await saveWorkspace(workspace);
         sendResponse(workspace);
       } catch (error) {
-        console.error('[Manama] Failed to refresh workspace:', error);
+        console.error('[Concise] Failed to refresh workspace:', error);
         sendResponse(null);
       }
     })();

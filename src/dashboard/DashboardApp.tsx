@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from "preact/hooks";
-import { Workspace, UntrackedWindow } from "../shared/types";
+import { Workspace, UntrackedWindow, NEW_WORKSPACE_COLORS } from "../shared/types";
 import {
   getWorkspaceList,
   getUntrackedWindows,
   createWorkspace,
 } from "../shared/workspace-manager";
 import { exportData, importData } from "../shared/storage";
-import { WORKSPACE_COLORS } from "../shared/types";
 import { Sidebar } from "./components/Sidebar";
 import { WorkspaceDetail } from "./components/WorkspaceDetail";
+import { UntrackedWindowPanel } from "./components/UntrackedWindowPanel";
+import { CreateSuggestionDropdown } from "./components/CreateSuggestionDropdown";
 import { CommandPalette } from "../popup/components/CommandPalette";
 
 const styles = {
@@ -16,8 +17,8 @@ const styles = {
     display: "flex" as const,
     width: "100%",
     height: "100vh",
-    backgroundColor: "#1a1a2e",
-    color: "#e0e0e0",
+    backgroundColor: "#0f0f1a",
+    color: "#eaeaf5",
     fontFamily: "system-ui, -apple-system, sans-serif",
     fontSize: "13px",
     position: "relative" as const,
@@ -35,36 +36,22 @@ const styles = {
     display: "flex" as const,
     alignItems: "center" as const,
     gap: "12px",
-    padding: "16px 24px",
-    borderBottom: "1px solid #0f3460",
-    backgroundColor: "#16213e",
+    padding: "14px 24px",
+    borderBottom: "1px solid #1e2a50",
+    backgroundColor: "#13132a",
     flexShrink: "0",
+    position: "relative" as const,
   },
   searchInput: {
     flex: "1",
     padding: "10px 14px",
     fontSize: "14px",
-    backgroundColor: "#1a1a2e",
-    border: "1px solid #0f3460",
+    backgroundColor: "#0f0f1a",
+    border: "1px solid #1e2a50",
     borderRadius: "8px",
-    color: "#e0e0e0",
+    color: "#eaeaf5",
     outline: "none",
     boxSizing: "border-box" as const,
-  },
-  createBtn: {
-    padding: "10px 20px",
-    fontSize: "13px",
-    fontWeight: "500",
-    borderRadius: "8px",
-    border: "none",
-    backgroundColor: "#4F46E5",
-    color: "#e0e0e0",
-    cursor: "pointer",
-    whiteSpace: "nowrap" as const,
-    flexShrink: "0",
-  },
-  createBtnHover: {
-    backgroundColor: "#4338CA",
   },
   contentArea: {
     flex: "1",
@@ -73,11 +60,17 @@ const styles = {
   },
   emptyState: {
     display: "flex" as const,
+    flexDirection: "column" as const,
     alignItems: "center" as const,
     justifyContent: "center" as const,
     height: "100%",
-    color: "#8888a0",
+    gap: "8px",
+    color: "#6b6b88",
     fontSize: "15px",
+  },
+  emptyHint: {
+    fontSize: "13px",
+    color: "#50506a",
   },
 };
 
@@ -89,12 +82,13 @@ export function DashboardApp() {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
     null,
   );
+  const [selectedUntrackedId, setSelectedUntrackedId] = useState<number | null>(
+    null,
+  );
   const [currentWindowId, setCurrentWindowId] = useState<number | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState(WORKSPACE_COLORS[0]);
+  const [newColor, setNewColor] = useState(NEW_WORKSPACE_COLORS[0]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
@@ -148,7 +142,7 @@ export function DashboardApp() {
     const a = document.createElement("a");
     const date = new Date().toISOString().split("T")[0];
     a.href = url;
-    a.download = `manama-backup-${date}.json`;
+    a.download = `concise-backup-${date}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -176,15 +170,32 @@ export function DashboardApp() {
     input.value = "";
   };
 
-  const handleCreateWorkspace = async () => {
-    const trimmed = newName.trim();
+  const handleSelectWorkspace = (id: string) => {
+    setSelectedWorkspaceId(id);
+    setSelectedUntrackedId(null);
+  };
+
+  const handleSelectUntracked = (windowId: number) => {
+    setSelectedUntrackedId(windowId);
+    setSelectedWorkspaceId(null);
+  };
+
+  // Unified search/create: show create suggestion when query doesn't match an existing name
+  const showCreatePrompt =
+    searchQuery.trim().length > 0 &&
+    !workspaces.some(
+      (ws) => ws.name.toLowerCase() === searchQuery.trim().toLowerCase(),
+    );
+
+  const handleCreateFromSearch = async () => {
+    const trimmed = searchQuery.trim();
     if (!trimmed) return;
     try {
       const ws = await createWorkspace(trimmed, newColor);
-      setNewName("");
-      setNewColor(WORKSPACE_COLORS[0]);
-      setCreating(false);
+      setSearchQuery("");
+      setNewColor(NEW_WORKSPACE_COLORS[0]);
       setSelectedWorkspaceId(ws.id);
+      setSelectedUntrackedId(null);
       await loadData();
     } catch (err) {
       window.alert(
@@ -195,6 +206,10 @@ export function DashboardApp() {
 
   const selectedWorkspace = workspaces.find(
     (ws) => ws.id === selectedWorkspaceId,
+  );
+
+  const selectedUntracked = untrackedWindows.find(
+    (uw) => uw.windowId === selectedUntrackedId,
   );
 
   const filteredWorkspaces = searchQuery.trim()
@@ -210,7 +225,9 @@ export function DashboardApp() {
         untrackedWindows={untrackedWindows}
         currentWindowId={currentWindowId}
         selectedId={selectedWorkspaceId}
-        onSelect={setSelectedWorkspaceId}
+        selectedUntrackedId={selectedUntrackedId}
+        onSelect={handleSelectWorkspace}
+        onSelectUntracked={handleSelectUntracked}
         onRefresh={loadData}
         onExport={handleExport}
         onImport={handleImport}
@@ -221,98 +238,24 @@ export function DashboardApp() {
           <input
             style={styles.searchInput}
             type="text"
-            placeholder='Search workspaces... (press "/" for command palette)'
+            placeholder='Search or create workspaces... (press "/" for command palette)'
             value={searchQuery}
             onInput={(e) =>
               setSearchQuery((e.target as HTMLInputElement).value)
             }
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && showCreatePrompt) {
+                handleCreateFromSearch();
+              }
+            }}
           />
-          {creating ? (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <input
-                style={{
-                  padding: "10px 14px",
-                  fontSize: "13px",
-                  backgroundColor: "#1a1a2e",
-                  border: "1px solid #0f3460",
-                  borderRadius: "8px",
-                  color: "#e0e0e0",
-                  outline: "none",
-                  width: "180px",
-                }}
-                type="text"
-                placeholder="Workspace name"
-                value={newName}
-                onInput={(e) =>
-                  setNewName((e.target as HTMLInputElement).value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreateWorkspace();
-                  if (e.key === "Escape") {
-                    setCreating(false);
-                    setNewName("");
-                  }
-                }}
-                autoFocus
-              />
-              <div
-                style={{
-                  display: "flex",
-                  gap: "4px",
-                  alignItems: "center",
-                }}
-              >
-                {WORKSPACE_COLORS.map((c) => (
-                  <div
-                    key={c}
-                    onClick={() => setNewColor(c)}
-                    style={{
-                      width: "18px",
-                      height: "18px",
-                      borderRadius: "50%",
-                      backgroundColor: c,
-                      cursor: "pointer",
-                      border:
-                        c === newColor
-                          ? "2px solid #e0e0e0"
-                          : "2px solid transparent",
-                    }}
-                  />
-                ))}
-              </div>
-              <button
-                style={styles.createBtn}
-                onClick={handleCreateWorkspace}
-              >
-                Create
-              </button>
-              <button
-                style={{
-                  ...styles.createBtn,
-                  backgroundColor: "transparent",
-                  border: "1px solid #0f3460",
-                }}
-                onClick={() => {
-                  setCreating(false);
-                  setNewName("");
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              style={styles.createBtn}
-              onClick={() => setCreating(true)}
-            >
-              + New Workspace
-            </button>
+          {showCreatePrompt && (
+            <CreateSuggestionDropdown
+              name={searchQuery.trim()}
+              selectedColor={newColor}
+              onSelectColor={setNewColor}
+              onCreate={handleCreateFromSearch}
+            />
           )}
         </div>
 
@@ -323,9 +266,20 @@ export function DashboardApp() {
               isCurrent={selectedWorkspace.windowId === currentWindowId}
               onRefresh={loadData}
             />
+          ) : selectedUntracked ? (
+            <UntrackedWindowPanel
+              window={selectedUntracked}
+              onAssigned={async () => {
+                await loadData();
+                setSelectedUntrackedId(null);
+              }}
+            />
           ) : (
             <div style={styles.emptyState}>
-              Select a workspace from the sidebar
+              <span>Select a workspace from the sidebar</span>
+              <span style={styles.emptyHint}>
+                Type a name to create, or select an untracked window
+              </span>
             </div>
           )}
         </div>

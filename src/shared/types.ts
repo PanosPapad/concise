@@ -33,4 +33,6 @@ export const WORKSPACE_COLORS = [
   '#DB2777', // pink
 ] as const;
 
+export const NEW_WORKSPACE_COLORS = WORKSPACE_COLORS.filter(c => c !== '#DC2626');
+
 export type WorkspaceColor = typeof WORKSPACE_COLORS[number];

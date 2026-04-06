@@ -116,7 +116,7 @@ export function App() {
     const a = document.createElement("a");
     const date = new Date().toISOString().split("T")[0];
     a.href = url;
-    a.download = `manama-backup-${date}.json`;
+    a.download = `concise-backup-${date}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -149,7 +149,7 @@ export function App() {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <h1 style={styles.title}>Manama</h1>
+        <h1 style={styles.title}>Concise</h1>
         {!paletteOpen && <span style={styles.searchHint}>/ to search</span>}
         <button
           style={styles.addButton}

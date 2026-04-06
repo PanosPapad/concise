@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { UntrackedWindow as UntrackedWindowType, WORKSPACE_COLORS } from "../../shared/types";
+import { UntrackedWindow as UntrackedWindowType, NEW_WORKSPACE_COLORS } from "../../shared/types";
 import { createWorkspace } from "../../shared/workspace-manager";
 
 interface Props {
@@ -116,7 +116,7 @@ const styles = {
 export function UntrackedWindowCard({ window: win, onAssigned }: Props) {
   const [assigning, setAssigning] = useState(false);
   const [name, setName] = useState("");
-  const [color, setColor] = useState<string>(WORKSPACE_COLORS[0]);
+  const [color, setColor] = useState<string>(NEW_WORKSPACE_COLORS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -173,7 +173,7 @@ export function UntrackedWindowCard({ window: win, onAssigned }: Props) {
             />
           </div>
           <div style={styles.colorRow}>
-            {WORKSPACE_COLORS.map((c) => (
+            {NEW_WORKSPACE_COLORS.map((c) => (
               <div
                 key={c}
                 style={styles.colorDot(c, c === color)}

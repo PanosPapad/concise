@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Manama - Tab Organiser",
+  "name": "Concise - Tab Organiser",
   "description": "Named workspaces for Chrome windows",
   "version": "0.2.0",
   "permissions": ["tabs", "storage", "windows"],
@@ -15,7 +15,7 @@
         "default": "Ctrl+Shift+K",
         "mac": "Command+Shift+K"
       },
-      "description": "Open Manama"
+      "description": "Open Concise"
     }
   }
 }
