@@ -9,6 +9,32 @@ import { snapshotTabs, getWorkspaceList } from '../shared/workspace-manager';
 
 console.log('Manama service worker loaded');
 
+// --- Dashboard tab management ---
+
+const DASHBOARD_PATH = 'dashboard/index.html';
+
+async function openOrFocusDashboard(): Promise<void> {
+  const extensionUrl = chrome.runtime.getURL(DASHBOARD_PATH);
+  const tabs = await chrome.tabs.query({ url: extensionUrl });
+
+  if (tabs.length > 0 && tabs[0].id !== undefined) {
+    await chrome.tabs.update(tabs[0].id, { active: true });
+    if (tabs[0].windowId !== undefined) {
+      await chrome.windows.update(tabs[0].windowId, { focused: true });
+    }
+  } else {
+    await chrome.tabs.create({ url: extensionUrl });
+  }
+}
+
+chrome.action.onClicked.addListener(async () => {
+  try {
+    await openOrFocusDashboard();
+  } catch (error) {
+    console.error('[Manama] Failed to open or focus dashboard:', error);
+  }
+});
+
 // --- Debounce infrastructure ---
 
 const pendingSnapshots = new Map<number, ReturnType<typeof setTimeout>>();
