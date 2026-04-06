@@ -25,7 +25,7 @@ function itemStyle(
         ? "#1a2340"
         : "transparent",
     borderLeft: isSelected ? `3px solid ${color}` : "3px solid transparent",
-    paddingLeft: isSelected ? "17px" : "17px",
+    paddingLeft: "17px",
     transition: "background-color 0.1s",
   };
 }

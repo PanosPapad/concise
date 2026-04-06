@@ -27,8 +27,12 @@ async function openOrFocusDashboard(): Promise<void> {
   }
 }
 
-chrome.action.onClicked.addListener(() => {
-  openOrFocusDashboard();
+chrome.action.onClicked.addListener(async () => {
+  try {
+    await openOrFocusDashboard();
+  } catch (error) {
+    console.error('[Manama] Failed to open or focus dashboard:', error);
+  }
 });
 
 // --- Debounce infrastructure ---

@@ -1,4 +1,4 @@
-import { useState, useRef } from "preact/hooks";
+import { useState, useRef, useEffect } from "preact/hooks";
 import { Workspace } from "../../shared/types";
 import {
   switchToWorkspace,
@@ -230,6 +230,12 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(workspace.name);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isCommitting = useRef(false);
+
+  useEffect(() => {
+    setEditName(workspace.name);
+    setEditing(false);
+  }, [workspace.id]);
 
   const isActive = workspace.windowId !== null;
 
@@ -246,12 +252,18 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
   };
 
   const commitRename = async () => {
-    const trimmed = editName.trim();
-    if (trimmed && trimmed !== workspace.name) {
-      await renameWorkspace(workspace.id, trimmed);
-      onRefresh();
+    if (isCommitting.current) return;
+    isCommitting.current = true;
+    try {
+      const trimmed = editName.trim();
+      if (trimmed && trimmed !== workspace.name) {
+        await renameWorkspace(workspace.id, trimmed);
+        onRefresh();
+      }
+      setEditing(false);
+    } finally {
+      isCommitting.current = false;
     }
-    setEditing(false);
   };
 
   const handleDelete = () => {
