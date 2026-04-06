@@ -3,6 +3,7 @@ import { Workspace } from "../shared/types";
 import { getWorkspaceList } from "../shared/workspace-manager";
 import { WorkspaceList } from "./components/WorkspaceList";
 import { CreateWorkspace } from "./components/CreateWorkspace";
+import { CommandPalette } from "./components/CommandPalette";
 
 const styles = {
   container: {
@@ -13,6 +14,7 @@ const styles = {
     color: "#e0e0e0",
     fontFamily: "system-ui, -apple-system, sans-serif",
     fontSize: "13px",
+    position: "relative" as const,
   },
   header: {
     display: "flex",
@@ -25,6 +27,12 @@ const styles = {
     fontSize: "16px",
     fontWeight: 600,
     margin: 0,
+  },
+  searchHint: {
+    fontSize: "11px",
+    color: "#555570",
+    flex: "1",
+    textAlign: "center" as const,
   },
   addButton: {
     width: "28px",
@@ -49,6 +57,7 @@ export function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [creating, setCreating] = useState(false);
   const [currentWindowId, setCurrentWindowId] = useState<number | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const loadData = async () => {
     const list = await getWorkspaceList();
@@ -62,10 +71,26 @@ export function App() {
     });
   }, []);
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (
+        e.key === "/" &&
+        !(e.target instanceof HTMLInputElement) &&
+        !(e.target instanceof HTMLTextAreaElement)
+      ) {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
   return (
     <div style={styles.container}>
       <div style={styles.header}>
         <h1 style={styles.title}>Manama</h1>
+        {!paletteOpen && <span style={styles.searchHint}>/ to search</span>}
         <button
           style={styles.addButton}
           onClick={() => setCreating(!creating)}
@@ -90,6 +115,13 @@ export function App() {
           onRefresh={loadData}
         />
       </div>
+      {paletteOpen && (
+        <CommandPalette
+          workspaces={workspaces}
+          onClose={() => setPaletteOpen(false)}
+          onRefresh={loadData}
+        />
+      )}
     </div>
   );
 }
