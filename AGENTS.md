@@ -1,8 +1,8 @@
-# AGENTS.md -- Manama Tab Organiser
+# AGENTS.md -- Concise Tab Organiser
 
 ## Project Overview
 
-Manama is a Chrome extension that lets users organise browser tabs into named workspaces. It solves the problem of multiple Chrome windows accumulating stale tabs with no clear boundaries between contexts (e.g., "work", "side project", "research").
+Concise is a Chrome extension that lets users organise browser tabs into named workspaces. It solves the problem of multiple Chrome windows accumulating stale tabs with no clear boundaries between contexts (e.g., "work", "side project", "research").
 
 Core capabilities:
 - Named, color-coded workspaces bound to Chrome windows
@@ -145,7 +145,7 @@ All imports come from `preact/hooks` (`useState`, `useEffect`, `useRef`, `useMem
 
 ### Error Handling
 - Async operations wrapped in try/catch with `window.alert` for user-facing errors
-- Service worker errors logged with `console.error` prefixed `[Manama]`
+- Service worker errors logged with `console.error` prefixed `[Concise]`
 - Fallback values used liberally: `tab.url ?? ""`, `tab.pinned ?? false`
 
 ### Chrome API Usage
