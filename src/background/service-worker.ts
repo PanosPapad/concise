@@ -15,28 +15,13 @@ const DASHBOARD_PATH = 'dashboard/index.html';
 
 async function openOrFocusDashboard(): Promise<void> {
   const extensionUrl = chrome.runtime.getURL(DASHBOARD_PATH);
-  const tabs = await chrome.tabs.query({ url: extensionUrl });
+  const currentWindow = await chrome.windows.getCurrent();
+  const tabs = await chrome.tabs.query({ url: extensionUrl, windowId: currentWindow.id });
 
-  if (tabs.length > 0) {
-    const primary = tabs[0];
-    // Close any accidental duplicate dashboard tabs
-    for (let i = 1; i < tabs.length; i++) {
-      if (tabs[i].id !== undefined) {
-        try {
-          await chrome.tabs.remove(tabs[i].id!);
-        } catch {
-          // Tab may already be closing
-        }
-      }
-    }
-    if (primary.id !== undefined) {
-      await chrome.tabs.update(primary.id, { active: true });
-    }
-    if (primary.windowId !== undefined) {
-      await chrome.windows.update(primary.windowId, { focused: true });
-    }
+  if (tabs.length > 0 && tabs[0].id !== undefined) {
+    await chrome.tabs.update(tabs[0].id, { active: true });
   } else {
-    await chrome.tabs.create({ url: extensionUrl });
+    await chrome.tabs.create({ url: extensionUrl, windowId: currentWindow.id });
   }
 }
 
