@@ -41,8 +41,11 @@ export async function createWorkspace(
   color: string,
   targetWindowId?: number,
 ): Promise<Workspace> {
-  const windowId =
-    targetWindowId ?? (await chrome.windows.getCurrent()).id!;
+  const windowId = targetWindowId ?? await (async () => {
+    const win = await chrome.windows.getCurrent();
+    if (win.id === undefined) throw new Error('Unable to create workspace: current window has no id');
+    return win.id;
+  })();
 
   const existing = await getAllWorkspaces();
   const conflict = Object.values(existing).find(
@@ -81,20 +84,24 @@ export async function restoreWorkspace(id: string): Promise<void> {
   const workspace = await getWorkspace(id);
   if (!workspace) return;
 
-  const firstUrl = workspace.tabs[0]?.url;
-  if (!firstUrl) {
+  const restorableTabs = workspace.tabs.filter((t) => {
+    const url = t.url ?? '';
+    return url !== '' && !url.startsWith('chrome://') && !url.startsWith('chrome-extension://');
+  });
+  const firstTab = restorableTabs[0];
+  if (!firstTab) {
     throw new Error('Workspace has no restorable tabs');
   }
 
-  const newWindow = await chrome.windows.create({ url: firstUrl });
+  const newWindow = await chrome.windows.create({ url: firstTab.url });
   const newWindowId = newWindow.id!;
 
-  if (workspace.tabs[0]?.pinned && newWindow.tabs?.[0]?.id) {
+  if (firstTab.pinned && newWindow.tabs?.[0]?.id) {
     await chrome.tabs.update(newWindow.tabs[0].id, { pinned: true });
   }
 
-  for (let i = 1; i < workspace.tabs.length; i++) {
-    const tab = workspace.tabs[i];
+  for (let i = 1; i < restorableTabs.length; i++) {
+    const tab = restorableTabs[i];
     await chrome.tabs.create({
       windowId: newWindowId,
       url: tab.url,

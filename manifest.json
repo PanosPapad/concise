@@ -3,7 +3,7 @@
   "name": "Manama - Tab Organiser",
   "description": "Named workspaces for Chrome windows",
   "version": "0.1.0",
-  "permissions": ["tabs", "storage"],
+  "permissions": ["tabs", "storage", "windows"],
   "action": {
     "default_popup": "popup/index.html"
   },

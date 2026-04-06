@@ -92,7 +92,12 @@ chrome.tabs.onRemoved.addListener((_tabId, removeInfo) => {
 });
 
 chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.windowId !== undefined) {
+  const dominated =
+    changeInfo.status === 'complete' ||
+    changeInfo.pinned !== undefined ||
+    changeInfo.url !== undefined ||
+    changeInfo.title !== undefined;
+  if (dominated && tab.windowId !== undefined) {
     debouncedSnapshotForWindow(tab.windowId);
   }
 });

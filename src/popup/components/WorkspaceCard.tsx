@@ -208,6 +208,8 @@ export function WorkspaceCard({
     try {
       await fn();
       onRefresh();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Action failed');
     } finally {
       setLoading(false);
     }
