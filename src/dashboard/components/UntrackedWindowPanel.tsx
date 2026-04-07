@@ -1,6 +1,5 @@
 import { useState } from "preact/hooks";
-import { UntrackedWindow } from "../../shared/types";
-import { NEW_WORKSPACE_COLORS } from "../../shared/types";
+import { UntrackedWindow, NEW_WORKSPACE_COLORS } from "../../shared/types";
 import { createWorkspace } from "../../shared/workspace-manager";
 import { getDomain } from "../utils";
 
