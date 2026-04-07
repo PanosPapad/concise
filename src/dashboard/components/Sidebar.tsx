@@ -13,6 +13,7 @@ interface Props {
   onRefresh: () => void;
   onExport: () => void;
   onImport: () => void;
+  onShowHistory: () => void;
 }
 
 const styles = {
@@ -183,6 +184,7 @@ export function Sidebar({
   onRefresh,
   onExport,
   onImport,
+  onShowHistory,
 }: Props) {
   const [untrackedExpanded, setUntrackedExpanded] = useState(true);
 
@@ -260,6 +262,9 @@ export function Sidebar({
         </button>
         <button style={styles.footerBtn} onClick={onImport}>
           Import
+        </button>
+        <button style={styles.footerBtn} onClick={onShowHistory}>
+          History
         </button>
       </div>
     </div>

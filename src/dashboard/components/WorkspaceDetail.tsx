@@ -8,8 +8,11 @@ import {
   renameWorkspace,
   reorderWorkspace,
   saveCurrentAndSwitch,
+  toggleLock,
+  toggleStar,
+  updateWorkspaceNotes,
 } from "../../shared/workspace-manager";
-import { getDomain, relativeTime, isStale } from "../utils";
+import { TabRow } from "./TabRow";
 
 interface Props {
   workspace: Workspace;
@@ -82,6 +85,16 @@ const styles = {
     marginBottom: "24px",
     flexWrap: "wrap" as const,
   },
+  toggleBtn: (active: boolean, activeColor: string) => ({
+    padding: "6px 12px",
+    fontSize: "14px",
+    borderRadius: "8px",
+    border: active ? `1px solid ${activeColor}` : "1px solid #1e2a50",
+    backgroundColor: "transparent",
+    color: active ? activeColor : "#6b6b88",
+    cursor: "pointer",
+    flexShrink: "0",
+  }),
   actionBtn: (bg: string) => ({
     padding: "9px 20px",
     fontSize: "13px",
@@ -115,6 +128,32 @@ const styles = {
     cursor: "pointer",
     whiteSpace: "nowrap" as const,
   },
+  notesSection: {
+    marginBottom: "24px",
+  },
+  notesLabel: {
+    fontSize: "10px",
+    fontWeight: "600",
+    textTransform: "uppercase" as const,
+    color: "#6b6b88",
+    letterSpacing: "1px",
+    marginBottom: "8px",
+    display: "block" as const,
+  },
+  notesTextarea: {
+    width: "100%",
+    minHeight: "80px",
+    padding: "10px 14px",
+    fontSize: "13px",
+    backgroundColor: "#0f0f1a",
+    border: "1px solid #1e2a50",
+    borderRadius: "8px",
+    color: "#eaeaf5",
+    outline: "none",
+    resize: "vertical" as const,
+    boxSizing: "border-box" as const,
+    fontFamily: "inherit",
+  },
   spacer: {
     flex: "1",
   },
@@ -137,58 +176,6 @@ const styles = {
     overflow: "hidden" as const,
     boxShadow: "inset 0 1px 3px rgba(0,0,0,0.3)",
   },
-  tabRow: (stale: boolean, isHovered: boolean) => ({
-    display: "flex" as const,
-    alignItems: "center" as const,
-    gap: "10px",
-    padding: "12px 16px",
-    fontSize: "13px",
-    color: "#c0c0d0",
-    opacity: stale ? "0.5" : "1",
-    borderBottom: "1px solid #1e2a50",
-    backgroundColor: isHovered ? "#1c2545" : "transparent",
-    transition: "background-color 0.1s",
-  }),
-  tabFavicon: {
-    width: "14px",
-    height: "14px",
-    borderRadius: "2px",
-    flexShrink: "0",
-  },
-  tabFaviconFallback: {
-    width: "14px",
-    height: "14px",
-    borderRadius: "2px",
-    backgroundColor: "#333",
-    flexShrink: "0",
-  },
-  tabTitle: {
-    flex: "1",
-    minWidth: "0",
-    overflow: "hidden" as const,
-    textOverflow: "ellipsis" as const,
-    whiteSpace: "nowrap" as const,
-  },
-  pinIndicator: {
-    fontSize: "10px",
-    color: "#6b6b88",
-    flexShrink: "0",
-  },
-  tabDomain: {
-    fontSize: "12px",
-    color: "#50506a",
-    whiteSpace: "nowrap" as const,
-    flexShrink: "0",
-    minWidth: "80px",
-  },
-  tabTime: {
-    fontSize: "11px",
-    color: "#50506a",
-    whiteSpace: "nowrap" as const,
-    flexShrink: "0",
-    minWidth: "30px",
-    textAlign: "right" as const,
-  },
   emptyTabs: {
     padding: "24px",
     textAlign: "center" as const,
@@ -197,46 +184,23 @@ const styles = {
   },
 };
 
-function TabRow({ tab }: { tab: Workspace["tabs"][number] }) {
-  const [hovered, setHovered] = useState(false);
-  const stale = isStale(tab.lastActivatedAt);
-
-  return (
-    <div
-      style={styles.tabRow(stale, hovered)}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {tab.favIconUrl ? (
-        <img
-          src={tab.favIconUrl}
-          style={styles.tabFavicon}
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-          }}
-        />
-      ) : (
-        <div style={styles.tabFaviconFallback} />
-      )}
-      {tab.pinned && <span style={styles.pinIndicator}>PIN</span>}
-      <span style={styles.tabTitle}>{tab.title || tab.url}</span>
-      <span style={styles.tabDomain}>{getDomain(tab.url)}</span>
-      <span style={styles.tabTime}>{relativeTime(tab.lastActivatedAt)}</span>
-    </div>
-  );
-}
-
 export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(workspace.name);
   const inputRef = useRef<HTMLInputElement>(null);
   const isCommitting = useRef(false);
+  const [notesValue, setNotesValue] = useState(workspace.notes ?? "");
+  const notesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setEditName(workspace.name);
     setEditing(false);
   }, [workspace.id]);
+
+  useEffect(() => {
+    setNotesValue(workspace.notes ?? "");
+  }, [workspace.id, workspace.notes]);
 
   const isActive = workspace.windowId !== null;
 
@@ -265,6 +229,21 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
     } finally {
       isCommitting.current = false;
     }
+  };
+
+  const saveNotes = (value: string) => {
+    if (notesDebounceRef.current) clearTimeout(notesDebounceRef.current);
+    notesDebounceRef.current = setTimeout(() => {
+      updateWorkspaceNotes(workspace.id, value);
+    }, 600);
+  };
+
+  const flushNotes = () => {
+    if (notesDebounceRef.current) {
+      clearTimeout(notesDebounceRef.current);
+      notesDebounceRef.current = null;
+    }
+    updateWorkspaceNotes(workspace.id, notesValue);
   };
 
   const handleDelete = () => {
@@ -320,6 +299,20 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
         ) : (
           <span style={styles.statusBadge("#6b6b88")}>Saved</span>
         )}
+        <button
+          style={styles.toggleBtn(!!workspace.starred, "#D97706")}
+          onClick={() => act(() => toggleStar(workspace.id))}
+          title={workspace.starred ? "Unstar" : "Star"}
+        >
+          ★
+        </button>
+        <button
+          style={styles.toggleBtn(!!workspace.locked, "#4F46E5")}
+          onClick={() => act(() => toggleLock(workspace.id))}
+          title={workspace.locked ? "Unlock" : "Lock"}
+        >
+          {workspace.locked ? "🔒" : "🔓"}
+        </button>
       </div>
 
       <div style={styles.actionsRow}>
@@ -361,13 +354,15 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
             >
               Restore
             </button>
-            <button
-              style={btnStyle("#DC2626")}
-              disabled={loading}
-              onClick={handleDelete}
-            >
-              Delete
-            </button>
+            {!workspace.locked && (
+              <button
+                style={btnStyle("#DC2626")}
+                disabled={loading}
+                onClick={handleDelete}
+              >
+                Delete
+              </button>
+            )}
           </>
         )}
 
@@ -387,6 +382,21 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
         >
           Move Down
         </button>
+      </div>
+
+      <div style={styles.notesSection}>
+        <span style={styles.notesLabel}>Notes</span>
+        <textarea
+          style={styles.notesTextarea}
+          placeholder="Add context for this workspace..."
+          value={notesValue}
+          onInput={(e) => {
+            const val = (e.target as HTMLTextAreaElement).value;
+            setNotesValue(val);
+            saveNotes(val);
+          }}
+          onBlur={flushNotes}
+        />
       </div>
 
       <div style={styles.tabListHeader}>

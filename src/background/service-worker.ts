@@ -4,6 +4,7 @@ import {
   getWorkspace,
   saveWorkspace,
   saveAllWorkspaces,
+  pushBackup,
 } from '../shared/storage';
 import { snapshotTabs, getWorkspaceList } from '../shared/workspace-manager';
 
@@ -166,6 +167,29 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 
 chrome.runtime.onInstalled.addListener((details) => {
   console.log(`[Concise] Extension ${details.reason}: version ${chrome.runtime.getManifest().version}`);
+  chrome.alarms.create('concise-auto-backup', {
+    delayInMinutes: 30,
+    periodInMinutes: 30,
+  });
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  chrome.alarms.create('concise-auto-backup', {
+    delayInMinutes: 30,
+    periodInMinutes: 30,
+  });
+});
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== 'concise-auto-backup') return;
+  try {
+    const workspaces = await getAllWorkspaces();
+    if (Object.keys(workspaces).length === 0) return;
+    await pushBackup(workspaces);
+    console.log('[Concise] Auto-backup saved');
+  } catch (error) {
+    console.error('[Concise] Auto-backup failed:', error);
+  }
 });
 
 // --- Message handler ---

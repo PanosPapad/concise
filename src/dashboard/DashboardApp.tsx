@@ -10,6 +10,7 @@ import { Sidebar } from "./components/Sidebar";
 import { WorkspaceDetail } from "./components/WorkspaceDetail";
 import { UntrackedWindowPanel } from "./components/UntrackedWindowPanel";
 import { CreateSuggestionDropdown } from "./components/CreateSuggestionDropdown";
+import { BackupHistoryPanel } from "./components/BackupHistoryPanel";
 import { CommandPalette } from "../popup/components/CommandPalette";
 
 const styles = {
@@ -89,6 +90,7 @@ export function DashboardApp() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [newColor, setNewColor] = useState(NEW_WORKSPACE_COLORS[0]);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
@@ -231,6 +233,7 @@ export function DashboardApp() {
         onRefresh={loadData}
         onExport={handleExport}
         onImport={handleImport}
+        onShowHistory={() => setHistoryOpen(true)}
       />
 
       <div style={styles.mainArea}>
@@ -260,7 +263,12 @@ export function DashboardApp() {
         </div>
 
         <div style={styles.contentArea}>
-          {selectedWorkspace ? (
+          {historyOpen ? (
+            <BackupHistoryPanel
+              onClose={() => setHistoryOpen(false)}
+              onRefresh={loadData}
+            />
+          ) : selectedWorkspace ? (
             <WorkspaceDetail
               workspace={selectedWorkspace}
               isCurrent={selectedWorkspace.windowId === currentWindowId}
