@@ -1,20 +1,29 @@
-import { useState, useRef, useEffect } from "preact/hooks";
-import { Workspace } from "../../shared/types";
+import { useState, useRef, useEffect, useCallback } from "preact/hooks";
+import { Workspace, SavedTab } from "../../shared/types";
 import {
   switchToWorkspace,
   saveWorkspaceToStorage,
   restoreWorkspace,
   deleteWorkspace,
   renameWorkspace,
-  reorderWorkspace,
   saveCurrentAndSwitch,
+  removeTabFromWorkspace,
+  moveTabBetweenWorkspaces,
 } from "../../shared/workspace-manager";
-import { getDomain, relativeTime, isStale } from "../utils";
+import { getPreferences, setPreferences } from "../../shared/storage";
+import { groupTabsByDomain } from "../utils";
+import { ConfirmBar } from "./ConfirmBar";
+import { TabRow } from "./TabRow";
+import { ContextMenu, ContextMenuItem } from "./ContextMenu";
+import { EmptyState } from "./EmptyState";
 
 interface Props {
   workspace: Workspace;
+  allWorkspaces: Workspace[];
   isCurrent: boolean;
   onRefresh: () => void;
+  triggerRename?: boolean;
+  onRenameHandled?: () => void;
 }
 
 const styles = {
@@ -35,18 +44,34 @@ const styles = {
     backgroundColor: color,
     flexShrink: "0",
   }),
+  nameArea: (hovered: boolean) => ({
+    display: "flex" as const,
+    alignItems: "center" as const,
+    gap: "6px",
+    flex: "1",
+    minWidth: "0",
+    cursor: "pointer",
+    borderBottom: hovered ? "1px dashed #50506a" : "1px dashed transparent",
+  }),
   nameDisplay: {
     fontSize: "22px",
     fontWeight: "600",
     color: "#eaeaf5",
     cursor: "pointer",
     margin: "0",
-    flex: "1",
-    minWidth: "0",
     overflow: "hidden" as const,
     textOverflow: "ellipsis" as const,
     whiteSpace: "nowrap" as const,
   },
+  pencilIcon: (visible: boolean, hovered: boolean) => ({
+    display: "flex" as const,
+    alignItems: "center" as const,
+    flexShrink: "0",
+    color: hovered ? "#eaeaf5" : "#50506a",
+    opacity: visible ? "1" : "0",
+    transition: "opacity 0.15s ease, color 0.15s ease",
+    cursor: "pointer",
+  }),
   nameInput: {
     fontSize: "22px",
     fontWeight: "600",
@@ -105,19 +130,6 @@ const styles = {
     whiteSpace: "nowrap" as const,
     opacity: "0.5",
   }),
-  reorderBtn: {
-    padding: "8px 12px",
-    fontSize: "11px",
-    borderRadius: "8px",
-    border: "1px solid #1e2a50",
-    backgroundColor: "transparent",
-    color: "#6b6b88",
-    cursor: "pointer",
-    whiteSpace: "nowrap" as const,
-  },
-  spacer: {
-    flex: "1",
-  },
   tabListHeader: {
     display: "flex" as const,
     alignItems: "center" as const,
@@ -137,58 +149,6 @@ const styles = {
     overflow: "hidden" as const,
     boxShadow: "inset 0 1px 3px rgba(0,0,0,0.3)",
   },
-  tabRow: (stale: boolean, isHovered: boolean) => ({
-    display: "flex" as const,
-    alignItems: "center" as const,
-    gap: "10px",
-    padding: "12px 16px",
-    fontSize: "13px",
-    color: "#c0c0d0",
-    opacity: stale ? "0.5" : "1",
-    borderBottom: "1px solid #1e2a50",
-    backgroundColor: isHovered ? "#1c2545" : "transparent",
-    transition: "background-color 0.1s",
-  }),
-  tabFavicon: {
-    width: "14px",
-    height: "14px",
-    borderRadius: "2px",
-    flexShrink: "0",
-  },
-  tabFaviconFallback: {
-    width: "14px",
-    height: "14px",
-    borderRadius: "2px",
-    backgroundColor: "#333",
-    flexShrink: "0",
-  },
-  tabTitle: {
-    flex: "1",
-    minWidth: "0",
-    overflow: "hidden" as const,
-    textOverflow: "ellipsis" as const,
-    whiteSpace: "nowrap" as const,
-  },
-  pinIndicator: {
-    fontSize: "10px",
-    color: "#6b6b88",
-    flexShrink: "0",
-  },
-  tabDomain: {
-    fontSize: "12px",
-    color: "#50506a",
-    whiteSpace: "nowrap" as const,
-    flexShrink: "0",
-    minWidth: "80px",
-  },
-  tabTime: {
-    fontSize: "11px",
-    color: "#50506a",
-    whiteSpace: "nowrap" as const,
-    flexShrink: "0",
-    minWidth: "30px",
-    textAlign: "right" as const,
-  },
   emptyTabs: {
     padding: "24px",
     textAlign: "center" as const,
@@ -197,48 +157,118 @@ const styles = {
   },
 };
 
-function TabRow({ tab }: { tab: Workspace["tabs"][number] }) {
-  const [hovered, setHovered] = useState(false);
-  const stale = isStale(tab.lastActivatedAt);
-
-  return (
-    <div
-      style={styles.tabRow(stale, hovered)}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {tab.favIconUrl ? (
-        <img
-          src={tab.favIconUrl}
-          style={styles.tabFavicon}
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-          }}
-        />
-      ) : (
-        <div style={styles.tabFaviconFallback} />
-      )}
-      {tab.pinned && <span style={styles.pinIndicator}>PIN</span>}
-      <span style={styles.tabTitle}>{tab.title || tab.url}</span>
-      <span style={styles.tabDomain}>{getDomain(tab.url)}</span>
-      <span style={styles.tabTime}>{relativeTime(tab.lastActivatedAt)}</span>
-    </div>
-  );
-}
-
-export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
+export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh, triggerRename, onRenameHandled }: Props) {
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(workspace.name);
+  const [confirmAction, setConfirmAction] = useState<null | "delete" | "save-close">(null);
+  const [nameHovered, setNameHovered] = useState(false);
+  const [pencilHovered, setPencilHovered] = useState(false);
+  const [groupByDomain, setGroupByDomain] = useState(false);
+  const [collapsedDomains, setCollapsedDomains] = useState<Set<string>>(new Set());
+  const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; tab: SavedTab } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const isCommitting = useRef(false);
 
   useEffect(() => {
+    getPreferences().then((prefs) => setGroupByDomain(prefs.groupByDomain));
+  }, []);
+
+  useEffect(() => {
     setEditName(workspace.name);
     setEditing(false);
+    setConfirmAction(null);
+    setCollapsedDomains(new Set());
   }, [workspace.id]);
 
+  useEffect(() => {
+    if (triggerRename) {
+      enterEditMode();
+      if (onRenameHandled) onRenameHandled();
+    }
+  }, [triggerRename]);
+
   const isActive = workspace.windowId !== null;
+
+  const moveTargets = allWorkspaces.filter((ws) => ws.id !== workspace.id);
+
+  const handleGoToTab = async (tab: SavedTab) => {
+    if (workspace.windowId === null) return;
+    try {
+      const liveTabs = await chrome.tabs.query({ windowId: workspace.windowId });
+      const match = liveTabs.find((t) => t.url === tab.url);
+      if (match?.id !== undefined) {
+        await chrome.tabs.update(match.id, { active: true });
+        await chrome.windows.update(workspace.windowId!, { focused: true });
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to navigate to tab");
+    }
+  };
+
+  const handleCloseTab = async (tab: SavedTab) => {
+    try {
+      await removeTabFromWorkspace(workspace.id, tab.url);
+      onRefresh();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to remove tab");
+    }
+  };
+
+  const handleMoveTab = async (tab: SavedTab, targetWorkspaceId: string) => {
+    try {
+      await moveTabBetweenWorkspaces(workspace.id, targetWorkspaceId, tab.url);
+      onRefresh();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to move tab");
+    }
+  };
+
+  const handleTabContextMenu = (e: MouseEvent, tab: SavedTab) => {
+    setTabContextMenu({ x: e.clientX, y: e.clientY, tab });
+  };
+
+  const getTabContextMenuItems = (): ContextMenuItem[] => {
+    if (!tabContextMenu) return [];
+    const tab = tabContextMenu.tab;
+    const items: ContextMenuItem[] = [];
+
+    if (isActive) {
+      items.push({ label: "Go to Tab", onClick: () => handleGoToTab(tab) });
+      items.push({ label: "Close Tab", onClick: () => handleCloseTab(tab) });
+      items.push({
+        label: "Copy URL",
+        onClick: () => { navigator.clipboard.writeText(tab.url); },
+        divider: true,
+      });
+    } else {
+      items.push({
+        label: "Remove from Workspace",
+        onClick: () => handleCloseTab(tab),
+      });
+      items.push({
+        label: "Copy URL",
+        onClick: () => { navigator.clipboard.writeText(tab.url); },
+      });
+    }
+
+    if (moveTargets.length > 0) {
+      items.push({
+        label: "Move to:",
+        onClick: () => {},
+        disabled: true,
+        divider: true,
+      });
+      for (const target of moveTargets) {
+        items.push({
+          label: target.name,
+          onClick: () => handleMoveTab(tab, target.id),
+        });
+      }
+    }
+
+    return items;
+  };
 
   const act = async (fn: () => Promise<void>) => {
     setLoading(true);
@@ -268,9 +298,23 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
   };
 
   const handleDelete = () => {
-    if (window.confirm(`Delete "${workspace.name}"?`)) {
+    setConfirmAction("delete");
+  };
+
+  const handleCancelConfirm = useCallback(() => {
+    setConfirmAction(null);
+  }, []);
+
+  const handleConfirmAction = useCallback(() => {
+    if (confirmAction === "delete") {
       act(() => deleteWorkspace(workspace.id));
     }
+    setConfirmAction(null);
+  }, [confirmAction, workspace.id]);
+
+  const enterEditMode = () => {
+    setEditName(workspace.name);
+    setEditing(true);
   };
 
   const btnStyle = loading ? styles.actionBtnDisabled : styles.actionBtn;
@@ -299,16 +343,27 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
             autoFocus
           />
         ) : (
-          <h2
-            style={styles.nameDisplay}
-            onDblClick={() => {
-              setEditName(workspace.name);
-              setEditing(true);
-            }}
+          <div
+            style={styles.nameArea(nameHovered)}
+            onMouseEnter={() => setNameHovered(true)}
+            onMouseLeave={() => { setNameHovered(false); setPencilHovered(false); }}
+            onDblClick={enterEditMode}
             title="Double-click to rename"
           >
-            {workspace.name}
-          </h2>
+            <h2 style={styles.nameDisplay}>
+              {workspace.name}
+            </h2>
+            <span
+              style={styles.pencilIcon(nameHovered, pencilHovered)}
+              onMouseEnter={() => setPencilHovered(true)}
+              onMouseLeave={() => setPencilHovered(false)}
+              onClick={(e) => { e.stopPropagation(); enterEditMode(); }}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8.5 1.5L10.5 3.5L4 10H2V8L8.5 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </span>
+          </div>
         )}
         <span style={styles.tabCount}>
           {workspace.tabs.length} tab{workspace.tabs.length !== 1 ? "s" : ""}
@@ -322,86 +377,231 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
         )}
       </div>
 
-      <div style={styles.actionsRow}>
-        {isActive && isCurrent && (
-          <button
-            style={btnStyle("#1e2a50")}
-            disabled={loading}
-            onClick={() => act(() => saveCurrentAndSwitch(workspace.id))}
-          >
-            Save & Switch
-          </button>
-        )}
-        {isActive && !isCurrent && (
-          <>
-            <button
-              style={btnStyle(workspace.color)}
-              disabled={loading}
-              onClick={() => act(() => switchToWorkspace(workspace.id))}
-            >
-              Switch
-            </button>
+      {confirmAction ? (
+        <div style={{ marginBottom: "24px" }}>
+          <ConfirmBar
+            message={
+              confirmAction === "delete"
+                ? "Delete this workspace?"
+                : "Save and close this window?"
+            }
+            confirmLabel={confirmAction === "delete" ? "Delete" : "Save & Close"}
+            confirmColor={confirmAction === "delete" ? "#DC2626" : "#D97706"}
+            onConfirm={handleConfirmAction}
+            onCancel={handleCancelConfirm}
+          />
+        </div>
+      ) : (
+        <div style={styles.actionsRow}>
+          {isActive && isCurrent && (
             <button
               style={btnStyle("#1e2a50")}
               disabled={loading}
-              onClick={() =>
-                act(() => saveWorkspaceToStorage(workspace.id))
-              }
+              onClick={() => act(() => saveCurrentAndSwitch(workspace.id))}
             >
-              Save
+              Save & Switch
             </button>
-          </>
-        )}
-        {!isActive && (
-          <>
-            <button
-              style={btnStyle(workspace.color)}
-              disabled={loading}
-              onClick={() => act(() => restoreWorkspace(workspace.id))}
-            >
-              Restore
-            </button>
-            <button
-              style={btnStyle("#DC2626")}
-              disabled={loading}
-              onClick={handleDelete}
-            >
-              Delete
-            </button>
-          </>
-        )}
+          )}
+          {isActive && !isCurrent && (
+            <>
+              <button
+                style={btnStyle(workspace.color)}
+                disabled={loading}
+                onClick={() => act(() => switchToWorkspace(workspace.id))}
+              >
+                Switch
+              </button>
+              <button
+                style={btnStyle("#1e2a50")}
+                disabled={loading}
+                onClick={() =>
+                  act(() => saveWorkspaceToStorage(workspace.id))
+                }
+              >
+                Save
+              </button>
+            </>
+          )}
+          {!isActive && (
+            <>
+              <button
+                style={btnStyle(workspace.color)}
+                disabled={loading}
+                onClick={() => act(() => restoreWorkspace(workspace.id))}
+              >
+                Restore
+              </button>
+              <button
+                style={btnStyle("#DC2626")}
+                disabled={loading}
+                onClick={handleDelete}
+              >
+                Delete
+              </button>
+            </>
+          )}
 
-        <div style={styles.spacer} />
-
-        <button
-          style={styles.reorderBtn}
-          onClick={() => act(() => reorderWorkspace(workspace.id, "up"))}
-          disabled={loading}
-        >
-          Move Up
-        </button>
-        <button
-          style={styles.reorderBtn}
-          onClick={() => act(() => reorderWorkspace(workspace.id, "down"))}
-          disabled={loading}
-        >
-          Move Down
-        </button>
-      </div>
+        </div>
+      )}
 
       <div style={styles.tabListHeader}>
         <h3 style={styles.tabListTitle}>Tabs</h3>
+        <div style={{ display: "flex", gap: "2px", alignItems: "center" }}>
+          <button
+            style={{
+              fontSize: "11px",
+              padding: "2px 8px",
+              borderRadius: "10px",
+              border: "none",
+              backgroundColor: !groupByDomain ? "#1e2a50" : "transparent",
+              color: !groupByDomain ? "#eaeaf5" : "#6b6b88",
+              cursor: "pointer",
+            }}
+            onClick={() => {
+              setGroupByDomain(false);
+              setPreferences({ groupByDomain: false });
+            }}
+          >
+            Flat
+          </button>
+          <button
+            style={{
+              fontSize: "11px",
+              padding: "2px 8px",
+              borderRadius: "10px",
+              border: "none",
+              backgroundColor: groupByDomain ? "#1e2a50" : "transparent",
+              color: groupByDomain ? "#eaeaf5" : "#6b6b88",
+              cursor: "pointer",
+            }}
+            onClick={() => {
+              setGroupByDomain(true);
+              setPreferences({ groupByDomain: true });
+            }}
+          >
+            Grouped
+          </button>
+        </div>
       </div>
 
       <div style={styles.tabList}>
         {workspace.tabs.length === 0 ? (
-          <div style={styles.emptyTabs}>No tabs in this workspace</div>
+          <EmptyState variant="no-tabs" isActive={isActive} />
+        ) : groupByDomain ? (
+          groupTabsByDomain(workspace.tabs).map((group) => {
+            const isCollapsed = collapsedDomains.has(group.domain);
+            const isSingleTab = group.tabs.length === 1;
+            const isPinned = group.domain === "Pinned";
+            return (
+              <div key={group.domain}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "8px 16px",
+                    cursor: "pointer",
+                    borderBottom: "1px solid #1e2a50",
+                    backgroundColor: "#0f0f1a",
+                    userSelect: "none" as const,
+                  }}
+                  onClick={() => {
+                    setCollapsedDomains((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(group.domain)) {
+                        next.delete(group.domain);
+                      } else {
+                        next.add(group.domain);
+                      }
+                      return next;
+                    });
+                  }}
+                >
+                  {isPinned ? (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: "0" }}>
+                      <path d="M7 1L11 5L7.5 8.5L5 11L4 7L1 4L4 5L7 1Z" stroke="#c0c0d0" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                    </svg>
+                  ) : null}
+                  <span style={{
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    color: isSingleTab && !isPinned ? "#6b6b88" : "#c0c0d0",
+                    flex: "1",
+                    minWidth: "0",
+                    overflow: "hidden" as const,
+                    textOverflow: "ellipsis" as const,
+                    whiteSpace: "nowrap" as const,
+                  }}>
+                    {isPinned ? "Pinned" : group.domain}
+                  </span>
+                  <span style={{
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    color: "#6b6b88",
+                    backgroundColor: "#1e2a50",
+                    borderRadius: "10px",
+                    padding: "1px 7px",
+                    flexShrink: "0",
+                  }}>
+                    {group.tabs.length}
+                  </span>
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 10 10"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    style={{
+                      flexShrink: "0",
+                      transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)",
+                      transition: "transform 0.15s ease",
+                    }}
+                  >
+                    <path d="M2 3.5L5 6.5L8 3.5" stroke="#6b6b88" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                {!isCollapsed && group.tabs.map((tab, i) => (
+                  <TabRow
+                    key={`${group.domain}-${tab.url}-${i}`}
+                    tab={tab}
+                    isActive={isActive}
+                    onGoToTab={isActive ? handleGoToTab : undefined}
+                    onCloseTab={handleCloseTab}
+                    onMoveTab={handleMoveTab}
+                    onContextMenu={handleTabContextMenu}
+                    moveTargets={moveTargets}
+                    showStaleLabel={true}
+                    extraPaddingLeft={12}
+                  />
+                ))}
+              </div>
+            );
+          })
         ) : (
           workspace.tabs.map((tab, i) => (
-            <TabRow key={`${tab.url}-${i}`} tab={tab} />
+            <TabRow
+              key={`${tab.url}-${i}`}
+              tab={tab}
+              isActive={isActive}
+              onGoToTab={isActive ? handleGoToTab : undefined}
+              onCloseTab={handleCloseTab}
+              onMoveTab={handleMoveTab}
+              onContextMenu={handleTabContextMenu}
+              moveTargets={moveTargets}
+              showStaleLabel={true}
+            />
           ))
         )}
       </div>
+
+      {tabContextMenu && (
+        <ContextMenu
+          x={tabContextMenu.x}
+          y={tabContextMenu.y}
+          items={getTabContextMenuItems()}
+          onClose={() => setTabContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

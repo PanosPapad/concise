@@ -1,6 +1,8 @@
 import { useState } from "preact/hooks";
 import { Workspace, UntrackedWindow } from "../../shared/types";
 import { SidebarWorkspaceItem } from "./SidebarWorkspaceItem";
+import { ContextMenu, ContextMenuItem } from "./ContextMenu";
+import { reorderWorkspaceTo } from "../../shared/workspace-manager";
 
 interface Props {
   workspaces: Workspace[];
@@ -13,6 +15,11 @@ interface Props {
   onRefresh: () => void;
   onExport: () => void;
   onImport: () => void;
+  onSwitchWorkspace: (id: string) => void;
+  onSaveWorkspace: (id: string) => void;
+  onRestoreWorkspace: (id: string) => void;
+  onDeleteWorkspace: (id: string) => void;
+  onRenameWorkspace: (id: string) => void;
 }
 
 const styles = {
@@ -183,11 +190,103 @@ export function Sidebar({
   onRefresh,
   onExport,
   onImport,
+  onSwitchWorkspace,
+  onSaveWorkspace,
+  onRestoreWorkspace,
+  onDeleteWorkspace,
+  onRenameWorkspace,
 }: Props) {
   const [untrackedExpanded, setUntrackedExpanded] = useState(true);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: "above" | "below" } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; workspaceId: string } | null>(null);
 
   const activeWorkspaces = workspaces.filter((ws) => ws.windowId !== null);
   const savedWorkspaces = workspaces.filter((ws) => ws.windowId === null);
+
+  const draggedWorkspace = draggedId ? workspaces.find((ws) => ws.id === draggedId) : null;
+  const draggedSection: "active" | "saved" | null = draggedWorkspace
+    ? (draggedWorkspace.windowId !== null ? "active" : "saved")
+    : null;
+
+  const handleDragStart = (id: string) => {
+    setDraggedId(id);
+  };
+
+  const handleDragOver = (id: string, position: "above" | "below") => {
+    if (!draggedId || draggedId === id) {
+      setDropTarget(null);
+      return;
+    }
+    const targetWs = workspaces.find((ws) => ws.id === id);
+    if (!targetWs) return;
+    const targetSection: "active" | "saved" = targetWs.windowId !== null ? "active" : "saved";
+    if (targetSection !== draggedSection) {
+      setDropTarget(null);
+      return;
+    }
+    setDropTarget({ id, position });
+  };
+
+  const handleDrop = async (targetId: string) => {
+    if (!draggedId || !dropTarget || !draggedSection) {
+      resetDragState();
+      return;
+    }
+    const sectionList = draggedSection === "active" ? activeWorkspaces : savedWorkspaces;
+    const targetIdx = sectionList.findIndex((ws) => ws.id === targetId);
+    if (targetIdx === -1) {
+      resetDragState();
+      return;
+    }
+    const newIndex = dropTarget.position === "below" ? targetIdx + 1 : targetIdx;
+    try {
+      await reorderWorkspaceTo(draggedId, newIndex, draggedSection);
+      onRefresh();
+    } catch {
+      // silently fail
+    }
+    resetDragState();
+  };
+
+  const resetDragState = () => {
+    setDraggedId(null);
+    setDropTarget(null);
+  };
+
+  const handleDragEnd = () => {
+    resetDragState();
+  };
+
+  const getDropIndicator = (wsId: string): "above" | "below" | null => {
+    if (!dropTarget || dropTarget.id !== wsId) return null;
+    return dropTarget.position;
+  };
+
+  const handleWorkspaceContextMenu = (e: MouseEvent, workspaceId: string) => {
+    setContextMenu({ x: e.clientX, y: e.clientY, workspaceId });
+  };
+
+  const getContextMenuItems = (): ContextMenuItem[] => {
+    if (!contextMenu) return [];
+    const ws = workspaces.find((w) => w.id === contextMenu.workspaceId);
+    if (!ws) return [];
+    const isActive = ws.windowId !== null;
+
+    if (isActive) {
+      return [
+        { label: "Switch to", onClick: () => onSwitchWorkspace(ws.id) },
+        { label: "Save & Close", onClick: () => onSaveWorkspace(ws.id) },
+        { label: "Rename", onClick: () => { onSelect(ws.id); onRenameWorkspace(ws.id); }, divider: true },
+      ];
+    }
+
+    return [
+      { label: "Restore", onClick: () => onRestoreWorkspace(ws.id) },
+      { label: "Rename", onClick: () => { onSelect(ws.id); onRenameWorkspace(ws.id); }, divider: true },
+      { label: "Delete", onClick: () => onDeleteWorkspace(ws.id), color: "#DC2626", divider: true },
+    ];
+  };
 
   return (
     <div style={styles.sidebar}>
@@ -208,6 +307,13 @@ export function Sidebar({
             isCurrent={ws.windowId === currentWindowId}
             isSelected={ws.id === selectedId}
             onClick={() => onSelect(ws.id)}
+            onContextMenu={handleWorkspaceContextMenu}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onDragEnd={handleDragEnd}
+            dropIndicator={getDropIndicator(ws.id)}
+            dragColor={draggedWorkspace?.color ?? null}
           />
         ))}
 
@@ -224,6 +330,13 @@ export function Sidebar({
             isCurrent={false}
             isSelected={ws.id === selectedId}
             onClick={() => onSelect(ws.id)}
+            onContextMenu={handleWorkspaceContextMenu}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onDragEnd={handleDragEnd}
+            dropIndicator={getDropIndicator(ws.id)}
+            dragColor={draggedWorkspace?.color ?? null}
           />
         ))}
 
@@ -262,6 +375,15 @@ export function Sidebar({
           Import
         </button>
       </div>
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getContextMenuItems()}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

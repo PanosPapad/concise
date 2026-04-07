@@ -35,6 +35,15 @@ export async function exportData(): Promise<string> {
   return JSON.stringify(workspaces, null, 2);
 }
 
+export async function getPreferences(): Promise<{ groupByDomain: boolean }> {
+  const result = await chrome.storage.local.get('preferences');
+  return result.preferences || { groupByDomain: false };
+}
+
+export async function setPreferences(prefs: { groupByDomain: boolean }): Promise<void> {
+  await chrome.storage.local.set({ preferences: prefs });
+}
+
 export async function importData(json: string): Promise<void> {
   const parsed = JSON.parse(json);
   if (typeof parsed !== 'object' || parsed === null) {

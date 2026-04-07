@@ -211,6 +211,35 @@ export async function reorderWorkspace(
   await saveAllWorkspaces(all);
 }
 
+export async function reorderWorkspaceTo(
+  workspaceId: string,
+  newIndex: number,
+  section: 'active' | 'saved',
+): Promise<void> {
+  const all = await getAllWorkspaces();
+  const list = Object.values(all).sort(
+    (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+  );
+
+  const activeList = list.filter((ws) => ws.windowId !== null);
+  const savedList = list.filter((ws) => ws.windowId === null);
+  const sectionList = section === 'active' ? activeList : savedList;
+
+  const currentIdx = sectionList.findIndex((ws) => ws.id === workspaceId);
+  if (currentIdx === -1) return;
+
+  const [moved] = sectionList.splice(currentIdx, 1);
+  const clampedIndex = Math.max(0, Math.min(newIndex, sectionList.length));
+  sectionList.splice(clampedIndex, 0, moved);
+
+  for (let i = 0; i < sectionList.length; i++) {
+    sectionList[i].sortOrder = i;
+    all[sectionList[i].id] = sectionList[i];
+  }
+
+  await saveAllWorkspaces(all);
+}
+
 export async function getUntrackedWindows(): Promise<UntrackedWindow[]> {
   const allWindows = await chrome.windows.getAll({ populate: true });
   const workspaces = await getAllWorkspaces();
@@ -237,6 +266,57 @@ export async function getUntrackedWindows(): Promise<UntrackedWindow[]> {
         })),
     }))
     .filter((win) => win.tabs.length > 0);
+}
+
+export async function removeTabFromWorkspace(
+  workspaceId: string,
+  tabUrl: string,
+): Promise<void> {
+  const workspace = await getWorkspace(workspaceId);
+  if (!workspace) return;
+
+  workspace.tabs = workspace.tabs.filter((t) => t.url !== tabUrl);
+  await saveWorkspace(workspace);
+
+  if (workspace.windowId !== null) {
+    const liveTabs = await chrome.tabs.query({ windowId: workspace.windowId });
+    const match = liveTabs.find((t) => t.url === tabUrl);
+    if (match?.id !== undefined) {
+      await chrome.tabs.remove(match.id);
+    }
+  }
+}
+
+export async function moveTabBetweenWorkspaces(
+  sourceWorkspaceId: string,
+  targetWorkspaceId: string,
+  tabUrl: string,
+): Promise<void> {
+  const [source, target] = await Promise.all([
+    getWorkspace(sourceWorkspaceId),
+    getWorkspace(targetWorkspaceId),
+  ]);
+  if (!source || !target) return;
+
+  const tab = source.tabs.find((t) => t.url === tabUrl);
+  if (!tab) return;
+
+  source.tabs = source.tabs.filter((t) => t.url !== tabUrl);
+  target.tabs.push(tab);
+
+  await Promise.all([saveWorkspace(source), saveWorkspace(target)]);
+
+  if (source.windowId !== null) {
+    const liveTabs = await chrome.tabs.query({ windowId: source.windowId });
+    const match = liveTabs.find((t) => t.url === tabUrl);
+    if (match?.id !== undefined) {
+      await chrome.tabs.remove(match.id);
+    }
+  }
+
+  if (target.windowId !== null) {
+    await chrome.tabs.create({ windowId: target.windowId, url: tabUrl });
+  }
 }
 
 export async function saveCurrentAndSwitch(

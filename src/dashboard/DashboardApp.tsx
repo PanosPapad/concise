@@ -3,14 +3,21 @@ import { Workspace, UntrackedWindow, NEW_WORKSPACE_COLORS } from "../shared/type
 import {
   getWorkspaceList,
   getUntrackedWindows,
+  switchToWorkspace,
+  saveWorkspaceToStorage,
+  restoreWorkspace,
+  deleteWorkspace,
   createWorkspace,
 } from "../shared/workspace-manager";
 import { exportData, importData } from "../shared/storage";
 import { Sidebar } from "./components/Sidebar";
 import { WorkspaceDetail } from "./components/WorkspaceDetail";
 import { UntrackedWindowPanel } from "./components/UntrackedWindowPanel";
-import { CreateSuggestionDropdown } from "./components/CreateSuggestionDropdown";
+import { CreateWorkspacePanel } from "./components/CreateWorkspacePanel";
 import { CommandPalette } from "../popup/components/CommandPalette";
+import { KeyboardShortcutsHelp } from "./components/KeyboardShortcutsHelp";
+import { EmptyState } from "./components/EmptyState";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 
 const styles = {
   container: {
@@ -53,6 +60,20 @@ const styles = {
     outline: "none",
     boxSizing: "border-box" as const,
   },
+  newButton: {
+    padding: "6px 14px",
+    fontSize: "13px",
+    fontWeight: "500" as const,
+    borderRadius: "16px",
+    border: "1px solid #2a3a60",
+    backgroundColor: "#1e2a50",
+    color: "#eaeaf5",
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+    flexShrink: "0" as const,
+    fontFamily: `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`,
+    transition: "background-color 0.15s",
+  },
   contentArea: {
     flex: "1",
     overflow: "auto" as const,
@@ -72,6 +93,56 @@ const styles = {
     fontSize: "13px",
     color: "#50506a",
   },
+  createSuggestion: {
+    position: "absolute" as const,
+    top: "100%",
+    left: "24px",
+    right: "24px",
+    marginTop: "4px",
+    backgroundColor: "#13132a",
+    border: "1px solid #1e2a50",
+    borderRadius: "8px",
+    padding: "10px 14px",
+    zIndex: 10,
+    display: "flex" as const,
+    alignItems: "center" as const,
+    gap: "12px",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+    cursor: "pointer",
+  },
+  suggestionLabel: {
+    flex: "1",
+    fontSize: "13px",
+    color: "#6b6b88",
+    minWidth: "0",
+    overflow: "hidden" as const,
+    textOverflow: "ellipsis" as const,
+    whiteSpace: "nowrap" as const,
+  },
+  suggestionColorPicker: {
+    display: "flex" as const,
+    gap: "4px",
+    alignItems: "center" as const,
+    flexShrink: 0,
+  },
+  suggestionCreateBtn: {
+    padding: "6px 14px",
+    fontSize: "12px",
+    fontWeight: "500" as const,
+    borderRadius: "6px",
+    border: "none",
+    backgroundColor: "#4F46E5",
+    color: "#eaeaf5",
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+    flexShrink: 0,
+    fontFamily: `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`,
+  },
+  suggestionHint: {
+    fontSize: "11px",
+    color: "#50506a",
+    flexShrink: 0,
+  },
 };
 
 export function DashboardApp() {
@@ -88,7 +159,8 @@ export function DashboardApp() {
   const [currentWindowId, setCurrentWindowId] = useState<number | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [newColor, setNewColor] = useState(NEW_WORKSPACE_COLORS[0]);
+  const [showCreatePanel, setShowCreatePanel] = useState(false);
+  const [inlineColor, setInlineColor] = useState("#4F46E5");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
@@ -116,24 +188,70 @@ export function DashboardApp() {
     return () => chrome.storage.onChanged.removeListener(listener);
   }, []);
 
-  // Command palette keyboard shortcut
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (
-        e.key === "/" &&
-        !(e.target instanceof HTMLInputElement) &&
-        !(e.target instanceof HTMLTextAreaElement)
-      ) {
-        e.preventDefault();
-        setPaletteOpen(true);
+  const handleSelectWorkspace = (id: string) => {
+    setSelectedWorkspaceId(id);
+    setSelectedUntrackedId(null);
+  };
+
+  const handleSidebarSwitch = (id: string) => {
+    switchToWorkspace(id).then(() => loadData());
+  };
+
+  const handleSidebarSave = (id: string) => {
+    saveWorkspaceToStorage(id).then(() => loadData());
+  };
+
+  const handleSidebarRestore = (id: string) => {
+    restoreWorkspace(id).then(() => loadData());
+  };
+
+  const handleSidebarDelete = (id: string) => {
+    deleteWorkspace(id).then(() => {
+      if (selectedWorkspaceId === id) {
+        setSelectedWorkspaceId(null);
       }
-      if (e.key === "Escape") {
-        setPaletteOpen(false);
+      loadData();
+    });
+  };
+
+  const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
+
+  const handleSidebarRename = (id: string) => {
+    setRenameTargetId(id);
+  };
+
+  // Keyboard shortcuts
+  const { showHelpOverlay, setShowHelpOverlay } = useKeyboardShortcuts({
+    workspaces,
+    selectedWorkspaceId,
+    onSelectWorkspace: handleSelectWorkspace,
+    onOpenCommandPalette: () => setPaletteOpen(true),
+    onCloseCommandPalette: () => setPaletteOpen(false),
+    isCommandPaletteOpen: paletteOpen,
+    onOpenCreatePanel: () => setShowCreatePanel(true),
+    onCloseCreatePanel: () => setShowCreatePanel(false),
+    isCreatePanelOpen: showCreatePanel,
+    onSaveWorkspace: (id: string) => {
+      saveWorkspaceToStorage(id).then(() => loadData());
+    },
+    onSwitchWorkspace: (id: string) => {
+      switchToWorkspace(id).then(() => loadData());
+    },
+    onRestoreWorkspace: (id: string) => {
+      restoreWorkspace(id).then(() => loadData());
+    },
+    onDeleteWorkspace: (id: string) => {
+      if (window.confirm("Delete this workspace?")) {
+        deleteWorkspace(id).then(() => {
+          if (selectedWorkspaceId === id) {
+            setSelectedWorkspaceId(null);
+          }
+          loadData();
+        });
       }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, []);
+    },
+    onShowHelp: () => setShowHelpOverlay(true),
+  });
 
   const handleExport = async () => {
     const json = await exportData();
@@ -170,37 +288,35 @@ export function DashboardApp() {
     input.value = "";
   };
 
-  const handleSelectWorkspace = (id: string) => {
-    setSelectedWorkspaceId(id);
-    setSelectedUntrackedId(null);
-  };
-
   const handleSelectUntracked = (windowId: number) => {
     setSelectedUntrackedId(windowId);
     setSelectedWorkspaceId(null);
   };
 
-  // Unified search/create: show create suggestion when query doesn't match an existing name
-  const showCreatePrompt =
+  const handleWorkspaceCreated = async (workspaceId: string) => {
+    setShowCreatePanel(false);
+    setSelectedWorkspaceId(workspaceId);
+    setSelectedUntrackedId(null);
+    await loadData();
+  };
+
+  const showCreateSuggestion =
     searchQuery.trim().length > 0 &&
+    !showCreatePanel &&
     !workspaces.some(
       (ws) => ws.name.toLowerCase() === searchQuery.trim().toLowerCase(),
     );
 
   const handleCreateFromSearch = async () => {
-    const trimmed = searchQuery.trim();
-    if (!trimmed) return;
     try {
-      const ws = await createWorkspace(trimmed, newColor);
+      const ws = await createWorkspace(searchQuery.trim(), inlineColor);
       setSearchQuery("");
-      setNewColor(NEW_WORKSPACE_COLORS[0]);
       setSelectedWorkspaceId(ws.id);
       setSelectedUntrackedId(null);
+      setInlineColor("#4F46E5");
       await loadData();
     } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : "Failed to create workspace",
-      );
+      window.alert(err instanceof Error ? err.message : "Failed to create");
     }
   };
 
@@ -231,6 +347,11 @@ export function DashboardApp() {
         onRefresh={loadData}
         onExport={handleExport}
         onImport={handleImport}
+        onSwitchWorkspace={handleSidebarSwitch}
+        onSaveWorkspace={handleSidebarSave}
+        onRestoreWorkspace={handleSidebarRestore}
+        onDeleteWorkspace={handleSidebarDelete}
+        onRenameWorkspace={handleSidebarRename}
       />
 
       <div style={styles.mainArea}>
@@ -238,33 +359,88 @@ export function DashboardApp() {
           <input
             style={styles.searchInput}
             type="text"
-            placeholder='Search or create workspaces... (press "/" for command palette)'
+            placeholder="Search or create workspace... (/ for command palette)"
             value={searchQuery}
             onInput={(e) =>
               setSearchQuery((e.target as HTMLInputElement).value)
             }
             onKeyDown={(e) => {
-              if (e.key === "Enter" && showCreatePrompt) {
+              if (e.key === "Enter" && showCreateSuggestion) {
+                e.preventDefault();
                 handleCreateFromSearch();
               }
             }}
           />
-          {showCreatePrompt && (
-            <CreateSuggestionDropdown
-              name={searchQuery.trim()}
-              selectedColor={newColor}
-              onSelectColor={setNewColor}
-              onCreate={handleCreateFromSearch}
-            />
+          <button
+            style={styles.newButton}
+            onClick={() => setShowCreatePanel((v) => !v)}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#253050";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1e2a50";
+            }}
+          >
+            + New
+          </button>
+          {showCreateSuggestion && (
+            <div style={styles.createSuggestion} onClick={handleCreateFromSearch}>
+              <span style={styles.suggestionLabel}>
+                Create workspace{" "}
+                <span style={{ color: inlineColor, fontWeight: "600" }}>
+                  "{searchQuery.trim()}"
+                </span>
+              </span>
+              <div
+                style={styles.suggestionColorPicker}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {NEW_WORKSPACE_COLORS.map((c) => (
+                  <div
+                    key={c}
+                    onClick={() => setInlineColor(c)}
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      borderRadius: "50%",
+                      backgroundColor: c,
+                      cursor: "pointer",
+                      border: c === inlineColor ? "2px solid #eaeaf5" : "2px solid transparent",
+                      transform: c === inlineColor ? "scale(1.2)" : "scale(1)",
+                      transition: "transform 0.1s",
+                    }}
+                  />
+                ))}
+              </div>
+              <button
+                style={styles.suggestionCreateBtn}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCreateFromSearch();
+                }}
+              >
+                Create
+              </button>
+              <span style={styles.suggestionHint}>Enter</span>
+            </div>
           )}
         </div>
+        {showCreatePanel && (
+          <CreateWorkspacePanel
+            onCreated={handleWorkspaceCreated}
+            onClose={() => setShowCreatePanel(false)}
+          />
+        )}
 
         <div style={styles.contentArea}>
           {selectedWorkspace ? (
             <WorkspaceDetail
               workspace={selectedWorkspace}
+              allWorkspaces={workspaces}
               isCurrent={selectedWorkspace.windowId === currentWindowId}
               onRefresh={loadData}
+              triggerRename={renameTargetId === selectedWorkspace.id}
+              onRenameHandled={() => setRenameTargetId(null)}
             />
           ) : selectedUntracked ? (
             <UntrackedWindowPanel
@@ -274,13 +450,19 @@ export function DashboardApp() {
                 setSelectedUntrackedId(null);
               }}
             />
+          ) : workspaces.length === 0 && untrackedWindows.length === 0 ? (
+            <EmptyState
+              variant="welcome"
+              onCreateWorkspace={() => setShowCreatePanel(true)}
+            />
+          ) : workspaces.length === 0 && untrackedWindows.length > 0 ? (
+            <EmptyState
+              variant="untracked-hint"
+              untrackedCount={untrackedWindows.length}
+              onCreateWorkspace={() => setShowCreatePanel(true)}
+            />
           ) : (
-            <div style={styles.emptyState}>
-              <span>Select a workspace from the sidebar</span>
-              <span style={styles.emptyHint}>
-                Type a name to create, or select an untracked window
-              </span>
-            </div>
+            <EmptyState variant="no-selection" />
           )}
         </div>
       </div>
@@ -299,6 +481,10 @@ export function DashboardApp() {
           onClose={() => setPaletteOpen(false)}
           onRefresh={loadData}
         />
+      )}
+
+      {showHelpOverlay && (
+        <KeyboardShortcutsHelp onClose={() => setShowHelpOverlay(false)} />
       )}
     </div>
   );
