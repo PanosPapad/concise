@@ -160,6 +160,15 @@ const styles = {
     flexShrink: "0",
     letterSpacing: "0.5px",
   }),
+  starIndicator: {
+    fontSize: "11px",
+    color: "#D97706",
+    flexShrink: "0",
+  },
+  lockIndicator: {
+    fontSize: "10px",
+    flexShrink: "0",
+  },
 };
 
 export function SidebarWorkspaceItem({
@@ -219,6 +228,7 @@ export function SidebarWorkspaceItem({
       }}
     >
       <HealthRing ratio={healthRatio} color={workspace.color} isActive={isActive} />
+      {workspace.starred && <span style={styles.starIndicator}>★</span>}
       <div style={styles.infoColumn}>
         <span style={styles.name}>{workspace.name}</span>
         <span style={styles.lastAccessed}>
@@ -229,6 +239,7 @@ export function SidebarWorkspaceItem({
         </span>
       </div>
       <span style={styles.badge}>{workspace.tabs.length}</span>
+      {workspace.locked && <span style={styles.lockIndicator}>🔒</span>}
       {isCurrent ? (
         <span style={styles.statusLabel(workspace.color)}>Current</span>
       ) : isActive ? (

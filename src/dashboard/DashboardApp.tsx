@@ -14,6 +14,7 @@ import { Sidebar } from "./components/Sidebar";
 import { WorkspaceDetail } from "./components/WorkspaceDetail";
 import { UntrackedWindowPanel } from "./components/UntrackedWindowPanel";
 import { CreateWorkspacePanel } from "./components/CreateWorkspacePanel";
+import { BackupHistoryPanel } from "./components/BackupHistoryPanel";
 import { CommandPalette } from "../popup/components/CommandPalette";
 import { KeyboardShortcutsHelp } from "./components/KeyboardShortcutsHelp";
 import { EmptyState } from "./components/EmptyState";
@@ -161,6 +162,7 @@ export function DashboardApp() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [inlineColor, setInlineColor] = useState("#4F46E5");
+  const [historyOpen, setHistoryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
@@ -352,6 +354,7 @@ export function DashboardApp() {
         onRestoreWorkspace={handleSidebarRestore}
         onDeleteWorkspace={handleSidebarDelete}
         onRenameWorkspace={handleSidebarRename}
+        onShowHistory={() => setHistoryOpen(true)}
       />
 
       <div style={styles.mainArea}>
@@ -433,7 +436,12 @@ export function DashboardApp() {
         )}
 
         <div style={styles.contentArea}>
-          {selectedWorkspace ? (
+          {historyOpen ? (
+            <BackupHistoryPanel
+              onClose={() => setHistoryOpen(false)}
+              onRefresh={loadData}
+            />
+          ) : selectedWorkspace ? (
             <WorkspaceDetail
               workspace={selectedWorkspace}
               allWorkspaces={workspaces}

@@ -20,6 +20,7 @@ interface Props {
   onRestoreWorkspace: (id: string) => void;
   onDeleteWorkspace: (id: string) => void;
   onRenameWorkspace: (id: string) => void;
+  onShowHistory: () => void;
 }
 
 const styles = {
@@ -195,6 +196,7 @@ export function Sidebar({
   onRestoreWorkspace,
   onDeleteWorkspace,
   onRenameWorkspace,
+  onShowHistory,
 }: Props) {
   const [untrackedExpanded, setUntrackedExpanded] = useState(true);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -373,6 +375,9 @@ export function Sidebar({
         </button>
         <button style={styles.footerBtn} onClick={onImport}>
           Import
+        </button>
+        <button style={styles.footerBtn} onClick={onShowHistory}>
+          History
         </button>
       </div>
 

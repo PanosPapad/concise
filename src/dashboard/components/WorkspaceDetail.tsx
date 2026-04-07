@@ -9,6 +9,9 @@ import {
   saveCurrentAndSwitch,
   removeTabFromWorkspace,
   moveTabBetweenWorkspaces,
+  toggleLock,
+  toggleStar,
+  updateWorkspaceNotes,
 } from "../../shared/workspace-manager";
 import { getPreferences, setPreferences } from "../../shared/storage";
 import { groupTabsByDomain } from "../utils";
@@ -107,6 +110,16 @@ const styles = {
     marginBottom: "24px",
     flexWrap: "wrap" as const,
   },
+  toggleBtn: (active: boolean, activeColor: string) => ({
+    padding: "6px 12px",
+    fontSize: "14px",
+    borderRadius: "8px",
+    border: active ? `1px solid ${activeColor}` : "1px solid #1e2a50",
+    backgroundColor: "transparent",
+    color: active ? activeColor : "#6b6b88",
+    cursor: "pointer",
+    flexShrink: "0",
+  }),
   actionBtn: (bg: string) => ({
     padding: "9px 20px",
     fontSize: "13px",
@@ -130,6 +143,32 @@ const styles = {
     whiteSpace: "nowrap" as const,
     opacity: "0.5",
   }),
+  notesSection: {
+    marginBottom: "24px",
+  },
+  notesLabel: {
+    fontSize: "10px",
+    fontWeight: "600",
+    textTransform: "uppercase" as const,
+    color: "#6b6b88",
+    letterSpacing: "1px",
+    marginBottom: "8px",
+    display: "block" as const,
+  },
+  notesTextarea: {
+    width: "100%",
+    minHeight: "80px",
+    padding: "10px 14px",
+    fontSize: "13px",
+    backgroundColor: "#0f0f1a",
+    border: "1px solid #1e2a50",
+    borderRadius: "8px",
+    color: "#eaeaf5",
+    outline: "none",
+    resize: "vertical" as const,
+    boxSizing: "border-box" as const,
+    fontFamily: "inherit",
+  },
   tabListHeader: {
     display: "flex" as const,
     alignItems: "center" as const,
@@ -169,6 +208,8 @@ export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh
   const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; tab: SavedTab } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const isCommitting = useRef(false);
+  const [notesValue, setNotesValue] = useState(workspace.notes ?? "");
+  const notesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     getPreferences().then((prefs) => setGroupByDomain(prefs.groupByDomain));
@@ -187,6 +228,19 @@ export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh
       if (onRenameHandled) onRenameHandled();
     }
   }, [triggerRename]);
+
+  useEffect(() => {
+    setNotesValue(workspace.notes ?? "");
+  }, [workspace.id, workspace.notes]);
+
+  useEffect(() => {
+    return () => {
+      if (notesDebounceRef.current) {
+        clearTimeout(notesDebounceRef.current);
+        notesDebounceRef.current = null;
+      }
+    };
+  }, []);
 
   const isActive = workspace.windowId !== null;
 
@@ -297,6 +351,21 @@ export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh
     }
   };
 
+  const saveNotes = (value: string) => {
+    if (notesDebounceRef.current) clearTimeout(notesDebounceRef.current);
+    notesDebounceRef.current = setTimeout(() => {
+      updateWorkspaceNotes(workspace.id, value).catch(console.error);
+    }, 600);
+  };
+
+  const flushNotes = () => {
+    if (notesDebounceRef.current) {
+      clearTimeout(notesDebounceRef.current);
+      notesDebounceRef.current = null;
+    }
+    updateWorkspaceNotes(workspace.id, notesValue).catch(console.error);
+  };
+
   const handleDelete = () => {
     setConfirmAction("delete");
   };
@@ -375,6 +444,20 @@ export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh
         ) : (
           <span style={styles.statusBadge("#6b6b88")}>Saved</span>
         )}
+        <button
+          style={styles.toggleBtn(!!workspace.starred, "#D97706")}
+          onClick={() => act(() => toggleStar(workspace.id))}
+          title={workspace.starred ? "Unstar" : "Star"}
+        >
+          ★
+        </button>
+        <button
+          style={styles.toggleBtn(!!workspace.locked, "#4F46E5")}
+          onClick={() => act(() => toggleLock(workspace.id))}
+          title={workspace.locked ? "Unlock" : "Lock"}
+        >
+          {workspace.locked ? "🔒" : "🔓"}
+        </button>
       </div>
 
       {confirmAction ? (
@@ -431,18 +514,35 @@ export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh
               >
                 Restore
               </button>
-              <button
-                style={btnStyle("#DC2626")}
-                disabled={loading}
-                onClick={handleDelete}
-              >
-                Delete
-              </button>
+              {!workspace.locked && (
+                <button
+                  style={btnStyle("#DC2626")}
+                  disabled={loading}
+                  onClick={handleDelete}
+                >
+                  Delete
+                </button>
+              )}
             </>
           )}
 
         </div>
       )}
+
+      <div style={styles.notesSection}>
+        <span style={styles.notesLabel}>Notes</span>
+        <textarea
+          style={styles.notesTextarea}
+          placeholder="Add context for this workspace..."
+          value={notesValue}
+          onInput={(e) => {
+            const val = (e.target as HTMLTextAreaElement).value;
+            setNotesValue(val);
+            saveNotes(val);
+          }}
+          onBlur={flushNotes}
+        />
+      </div>
 
       <div style={styles.tabListHeader}>
         <h3 style={styles.tabListTitle}>Tabs</h3>

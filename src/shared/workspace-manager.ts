@@ -7,6 +7,20 @@ import {
   deleteWorkspace as removeWorkspace,
 } from './storage';
 
+function isDegradedUrl(newUrl: string, oldUrl: string): boolean {
+  try {
+    const a = new URL(newUrl);
+    const b = new URL(oldUrl);
+    return (
+      a.origin === b.origin &&
+      b.pathname.startsWith(a.pathname) &&
+      b.pathname.length > a.pathname.length
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function snapshotTabs(
   windowId: number,
   existingTabs?: SavedTab[],
@@ -27,13 +41,24 @@ export async function snapshotTabs(
       const url = tab.url ?? '';
       return url !== '' && !url.startsWith('chrome://') && !url.startsWith('chrome-extension://');
     })
-    .map((tab) => ({
-      url: tab.url ?? '',
-      title: tab.title ?? '',
-      favIconUrl: tab.favIconUrl,
-      pinned: tab.pinned ?? false,
-      lastActivatedAt: activatedMap.get(tab.url ?? ''),
-    }));
+    .map((tab) => {
+      let url = tab.url ?? '';
+      // Guard against Chrome's tab-sleep URL degradation for SPAs (e.g. Gemini)
+      if (existingTabs && (tab.status === 'unloaded' || tab.discarded)) {
+        const preserved = existingTabs.find(
+          (old) => isDegradedUrl(url, old.url),
+        );
+        if (preserved) url = preserved.url;
+      }
+      return {
+        url,
+        title: tab.title ?? '',
+        favIconUrl: tab.favIconUrl,
+        pinned: tab.pinned ?? false,
+        lastActivatedAt:
+          activatedMap.get(url) ?? activatedMap.get(tab.url ?? ''),
+      };
+    });
 }
 
 export async function createWorkspace(
@@ -102,10 +127,14 @@ export async function restoreWorkspace(id: string): Promise<void> {
 
   for (let i = 1; i < restorableTabs.length; i++) {
     const tab = restorableTabs[i];
+    if (restorableTabs.length > 5 && i > 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
     await chrome.tabs.create({
       windowId: newWindowId,
       url: tab.url,
       pinned: tab.pinned,
+      active: false,
     });
   }
 
@@ -148,7 +177,33 @@ export async function saveWorkspaceToStorage(id: string): Promise<void> {
 }
 
 export async function deleteWorkspace(id: string): Promise<void> {
+  const workspace = await getWorkspace(id);
+  if (workspace?.locked) throw new Error(`"${workspace.name}" is locked`);
   await removeWorkspace(id);
+}
+
+export async function toggleLock(id: string): Promise<void> {
+  const workspace = await getWorkspace(id);
+  if (!workspace) return;
+  workspace.locked = !workspace.locked;
+  await saveWorkspace(workspace);
+}
+
+export async function toggleStar(id: string): Promise<void> {
+  const workspace = await getWorkspace(id);
+  if (!workspace) return;
+  workspace.starred = !workspace.starred;
+  await saveWorkspace(workspace);
+}
+
+export async function updateWorkspaceNotes(
+  id: string,
+  notes: string,
+): Promise<void> {
+  const workspace = await getWorkspace(id);
+  if (!workspace) return;
+  workspace.notes = notes;
+  await saveWorkspace(workspace);
 }
 
 export async function renameWorkspace(
@@ -180,7 +235,12 @@ export async function getWorkspaceList(): Promise<Workspace[]> {
     await saveAllWorkspaces(updated);
   }
 
-  return list.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  return list.sort((a, b) => {
+    const aStarred = a.starred ? 0 : 1;
+    const bStarred = b.starred ? 0 : 1;
+    if (aStarred !== bStarred) return aStarred - bStarred;
+    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+  });
 }
 
 export async function reorderWorkspace(

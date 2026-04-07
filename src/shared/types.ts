@@ -15,11 +15,19 @@ export interface Workspace {
   createdAt: number;
   lastAccessedAt: number;
   sortOrder: number;
+  locked?: boolean;
+  starred?: boolean;
+  notes?: string;
 }
 
 export interface UntrackedWindow {
   windowId: number;
   tabs: SavedTab[];
+}
+
+export interface BackupEntry {
+  timestamp: number;
+  workspaces: Record<string, Workspace>;
 }
 
 export const WORKSPACE_COLORS = [
