@@ -3,7 +3,7 @@
   "name": "Concise - Tab Organiser",
   "description": "Named workspaces for Chrome windows",
   "version": "0.2.0",
-  "permissions": ["tabs", "storage", "windows"],
+  "permissions": ["tabs", "storage", "windows", "alarms"],
   "action": {
     "default_icon": {
       "16": "icons/icon16.png",
