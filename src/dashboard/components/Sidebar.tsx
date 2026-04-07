@@ -7,7 +7,9 @@ interface Props {
   untrackedWindows: UntrackedWindow[];
   currentWindowId: number | null;
   selectedId: string | null;
+  selectedUntrackedId: number | null;
   onSelect: (id: string) => void;
+  onSelectUntracked: (windowId: number) => void;
   onRefresh: () => void;
   onExport: () => void;
   onImport: () => void;
@@ -18,27 +20,27 @@ const styles = {
     width: "280px",
     minWidth: "280px",
     height: "100vh",
-    backgroundColor: "#16213e",
-    borderRight: "1px solid #0f3460",
+    backgroundColor: "#13132a",
+    borderRight: "1px solid #1e2a50",
     display: "flex" as const,
     flexDirection: "column" as const,
     overflow: "hidden" as const,
   },
   header: {
     padding: "20px 20px 16px",
-    borderBottom: "1px solid #0f3460",
+    borderBottom: "1px solid #1e2a50",
     flexShrink: "0",
   },
   logo: {
-    fontSize: "20px",
-    fontWeight: "700",
+    fontSize: "18px",
+    fontWeight: "800",
     margin: "0",
-    color: "#e0e0e0",
-    letterSpacing: "-0.3px",
+    color: "#eaeaf5",
+    letterSpacing: "-0.5px",
   },
   version: {
     fontSize: "11px",
-    color: "#8888a0",
+    color: "#6b6b88",
     marginTop: "2px",
   },
   scrollArea: {
@@ -50,8 +52,8 @@ const styles = {
     fontSize: "10px",
     fontWeight: "600",
     textTransform: "uppercase" as const,
-    color: "#8888a0",
-    letterSpacing: "0.8px",
+    color: "#6b6b88",
+    letterSpacing: "1px",
     padding: "8px 20px 6px",
     margin: "0",
   },
@@ -66,33 +68,70 @@ const styles = {
     fontSize: "10px",
     fontWeight: "600",
     textTransform: "uppercase" as const,
-    color: "#8888a0",
-    letterSpacing: "0.8px",
+    color: "#6b6b88",
+    letterSpacing: "1px",
   },
   untrackedChevron: {
     fontSize: "9px",
-    color: "#8888a0",
+    color: "#6b6b88",
   },
-  untrackedItem: {
-    padding: "6px 20px 6px 28px",
+  untrackedItem: (isSelected: boolean, isHovered: boolean) => ({
+    display: "flex" as const,
+    alignItems: "center" as const,
+    gap: "10px",
+    padding: "8px 20px",
+    paddingLeft: "17px",
+    cursor: "pointer",
     fontSize: "12px",
-    color: "#686880",
+    color: isSelected ? "#eaeaf5" : "#50506a",
+    backgroundColor: isSelected
+      ? "#1c2545"
+      : isHovered
+        ? "#171730"
+        : "transparent",
+    borderLeft: isSelected
+      ? "3px dashed #6b6b88"
+      : "3px solid transparent",
+    transition: "background-color 0.1s",
+  }),
+  untrackedDot: {
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+    backgroundColor: "#50506a",
+    flexShrink: "0",
+  },
+  untrackedName: {
+    flex: "1",
+    minWidth: "0",
+    overflow: "hidden" as const,
+    textOverflow: "ellipsis" as const,
+    whiteSpace: "nowrap" as const,
+  },
+  untrackedBadge: {
+    fontSize: "10px",
+    color: "#6b6b88",
+    backgroundColor: "#1e2a50",
+    padding: "1px 6px",
+    borderRadius: "8px",
+    flexShrink: "0",
   },
   footer: {
     display: "flex" as const,
     justifyContent: "center" as const,
     gap: "8px",
     padding: "12px 20px",
-    borderTop: "1px solid #0f3460",
+    borderTop: "1px solid #1e2a50",
     flexShrink: "0",
   },
   footerBtn: {
     fontSize: "11px",
     padding: "6px 16px",
-    borderRadius: "6px",
-    border: "1px solid #0f3460",
+    borderRadius: "8px",
+    border: "1px solid #1e2a50",
     backgroundColor: "transparent",
-    color: "#8888a0",
+    color: "#6b6b88",
+    letterSpacing: "0.3px",
     cursor: "pointer",
     flex: "1",
     textAlign: "center" as const,
@@ -105,17 +144,47 @@ const styles = {
   },
 };
 
+function UntrackedItem({
+  window: uw,
+  isSelected,
+  onClick,
+}: {
+  window: UntrackedWindow;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      style={styles.untrackedItem(isSelected, hovered)}
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div style={styles.untrackedDot} />
+      <span style={styles.untrackedName}>
+        {uw.tabs[0]?.title ? `${uw.tabs[0].title.slice(0, 30)}...` : `Window ${uw.windowId}`}
+      </span>
+      <span style={styles.untrackedBadge}>
+        {uw.tabs.length}
+      </span>
+    </div>
+  );
+}
+
 export function Sidebar({
   workspaces,
   untrackedWindows,
   currentWindowId,
   selectedId,
+  selectedUntrackedId,
   onSelect,
+  onSelectUntracked,
   onRefresh,
   onExport,
   onImport,
 }: Props) {
-  const [untrackedExpanded, setUntrackedExpanded] = useState(false);
+  const [untrackedExpanded, setUntrackedExpanded] = useState(true);
 
   const activeWorkspaces = workspaces.filter((ws) => ws.windowId !== null);
   const savedWorkspaces = workspaces.filter((ws) => ws.windowId === null);
@@ -123,7 +192,7 @@ export function Sidebar({
   return (
     <div style={styles.sidebar}>
       <div style={styles.header}>
-        <h1 style={styles.logo}>Manama</h1>
+        <h1 style={styles.logo}>Concise</h1>
         <div style={styles.version}>Tab Organiser</div>
       </div>
 
@@ -174,10 +243,12 @@ export function Sidebar({
             </div>
             {untrackedExpanded &&
               untrackedWindows.map((uw) => (
-                <div key={uw.windowId} style={styles.untrackedItem}>
-                  Window {uw.windowId} — {uw.tabs.length} tab
-                  {uw.tabs.length !== 1 ? "s" : ""}
-                </div>
+                <UntrackedItem
+                  key={uw.windowId}
+                  window={uw}
+                  isSelected={uw.windowId === selectedUntrackedId}
+                  onClick={() => onSelectUntracked(uw.windowId)}
+                />
               ))}
           </>
         )}

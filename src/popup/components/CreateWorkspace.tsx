@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { WORKSPACE_COLORS } from "../../shared/types";
+import { NEW_WORKSPACE_COLORS } from "../../shared/types";
 import { createWorkspace } from "../../shared/workspace-manager";
 
 interface Props {
@@ -67,7 +67,7 @@ const styles = {
 
 export function CreateWorkspace({ onCreated, onCancel }: Props) {
   const [name, setName] = useState("");
-  const [color, setColor] = useState<string>(WORKSPACE_COLORS[0]);
+  const [color, setColor] = useState<string>(NEW_WORKSPACE_COLORS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,7 +102,7 @@ export function CreateWorkspace({ onCreated, onCancel }: Props) {
         autoFocus
       />
       <div style={styles.colorRow}>
-        {WORKSPACE_COLORS.map((c) => (
+        {NEW_WORKSPACE_COLORS.map((c) => (
           <div
             key={c}
             style={styles.colorDot(c, c === color)}

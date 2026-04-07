@@ -36,9 +36,9 @@ const styles = {
     flexShrink: "0",
   }),
   nameDisplay: {
-    fontSize: "24px",
+    fontSize: "22px",
     fontWeight: "600",
-    color: "#e0e0e0",
+    color: "#eaeaf5",
     cursor: "pointer",
     margin: "0",
     flex: "1",
@@ -48,24 +48,24 @@ const styles = {
     whiteSpace: "nowrap" as const,
   },
   nameInput: {
-    fontSize: "24px",
+    fontSize: "22px",
     fontWeight: "600",
     padding: "2px 8px",
-    backgroundColor: "#1a1a2e",
-    border: "1px solid #0f3460",
-    borderRadius: "6px",
-    color: "#e0e0e0",
+    backgroundColor: "#0f0f1a",
+    border: "1px solid #1e2a50",
+    borderRadius: "8px",
+    color: "#eaeaf5",
     outline: "none",
     flex: "1",
     minWidth: "0",
   },
   tabCount: {
     fontSize: "14px",
-    color: "#8888a0",
+    color: "#6b6b88",
     flexShrink: "0",
   },
   statusBadge: (color: string) => ({
-    fontSize: "11px",
+    fontSize: "10px",
     fontWeight: "600",
     textTransform: "uppercase" as const,
     color: color,
@@ -73,7 +73,7 @@ const styles = {
     borderRadius: "12px",
     border: `1px solid ${color}`,
     flexShrink: "0",
-    letterSpacing: "0.5px",
+    letterSpacing: "0.8px",
   }),
   actionsRow: {
     display: "flex" as const,
@@ -83,24 +83,24 @@ const styles = {
     flexWrap: "wrap" as const,
   },
   actionBtn: (bg: string) => ({
-    padding: "8px 20px",
+    padding: "9px 20px",
     fontSize: "13px",
     fontWeight: "500",
-    borderRadius: "6px",
+    borderRadius: "8px",
     border: "none",
     backgroundColor: bg,
-    color: "#e0e0e0",
+    color: "#eaeaf5",
     cursor: "pointer",
     whiteSpace: "nowrap" as const,
   }),
   actionBtnDisabled: (bg: string) => ({
-    padding: "8px 20px",
+    padding: "9px 20px",
     fontSize: "13px",
     fontWeight: "500",
-    borderRadius: "6px",
+    borderRadius: "8px",
     border: "none",
     backgroundColor: bg,
-    color: "#e0e0e0",
+    color: "#eaeaf5",
     cursor: "not-allowed" as const,
     whiteSpace: "nowrap" as const,
     opacity: "0.5",
@@ -108,10 +108,10 @@ const styles = {
   reorderBtn: {
     padding: "8px 12px",
     fontSize: "11px",
-    borderRadius: "6px",
-    border: "1px solid #0f3460",
+    borderRadius: "8px",
+    border: "1px solid #1e2a50",
     backgroundColor: "transparent",
-    color: "#8888a0",
+    color: "#6b6b88",
     cursor: "pointer",
     whiteSpace: "nowrap" as const,
   },
@@ -127,25 +127,26 @@ const styles = {
   tabListTitle: {
     fontSize: "14px",
     fontWeight: "600",
-    color: "#e0e0e0",
+    color: "#eaeaf5",
     margin: "0",
   },
   tabList: {
-    backgroundColor: "#16213e",
-    borderRadius: "8px",
-    border: "1px solid #0f3460",
+    backgroundColor: "#13132a",
+    borderRadius: "10px",
+    border: "1px solid #1e2a50",
     overflow: "hidden" as const,
+    boxShadow: "inset 0 1px 3px rgba(0,0,0,0.3)",
   },
   tabRow: (stale: boolean, isHovered: boolean) => ({
     display: "flex" as const,
     alignItems: "center" as const,
     gap: "10px",
-    padding: "10px 16px",
+    padding: "12px 16px",
     fontSize: "13px",
     color: "#c0c0d0",
     opacity: stale ? "0.5" : "1",
-    borderBottom: "1px solid #0f3460",
-    backgroundColor: isHovered ? "#1e2a4a" : "transparent",
+    borderBottom: "1px solid #1e2a50",
+    backgroundColor: isHovered ? "#1c2545" : "transparent",
     transition: "background-color 0.1s",
   }),
   tabFavicon: {
@@ -170,19 +171,19 @@ const styles = {
   },
   pinIndicator: {
     fontSize: "10px",
-    color: "#8888a0",
+    color: "#6b6b88",
     flexShrink: "0",
   },
   tabDomain: {
     fontSize: "12px",
-    color: "#686880",
+    color: "#50506a",
     whiteSpace: "nowrap" as const,
     flexShrink: "0",
     minWidth: "80px",
   },
   tabTime: {
     fontSize: "11px",
-    color: "#686880",
+    color: "#50506a",
     whiteSpace: "nowrap" as const,
     flexShrink: "0",
     minWidth: "30px",
@@ -191,7 +192,7 @@ const styles = {
   emptyTabs: {
     padding: "24px",
     textAlign: "center" as const,
-    color: "#8888a0",
+    color: "#6b6b88",
     fontSize: "13px",
   },
 };
@@ -317,14 +318,14 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
         ) : isActive ? (
           <span style={styles.statusBadge("#059669")}>Active</span>
         ) : (
-          <span style={styles.statusBadge("#8888a0")}>Saved</span>
+          <span style={styles.statusBadge("#6b6b88")}>Saved</span>
         )}
       </div>
 
       <div style={styles.actionsRow}>
         {isActive && isCurrent && (
           <button
-            style={btnStyle("#0f3460")}
+            style={btnStyle("#1e2a50")}
             disabled={loading}
             onClick={() => act(() => saveCurrentAndSwitch(workspace.id))}
           >
@@ -341,7 +342,7 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
               Switch
             </button>
             <button
-              style={btnStyle("#0f3460")}
+              style={btnStyle("#1e2a50")}
               disabled={loading}
               onClick={() =>
                 act(() => saveWorkspaceToStorage(workspace.id))

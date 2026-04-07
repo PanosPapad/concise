@@ -1,5 +1,5 @@
 {
-  "name": "manama",
+  "name": "concise",
   "private": true,
   "scripts": {
     "build": "node build.js",

@@ -17,14 +17,14 @@ function itemStyle(
     display: "flex",
     alignItems: "center",
     gap: "10px",
-    padding: "8px 20px",
+    padding: "9px 20px",
     cursor: "pointer",
     backgroundColor: isSelected
-      ? "#1e2a4a"
+      ? "#1c2545"
       : isHovered
-        ? "#1a2340"
+        ? "#171730"
         : "transparent",
-    borderLeft: isSelected ? `3px solid ${color}` : "3px solid transparent",
+    borderLeft: isSelected ? `3px solid ${color}` : isHovered ? `3px solid ${color}40` : "3px solid transparent",
     paddingLeft: "17px",
     transition: "background-color 0.1s",
   };
@@ -32,8 +32,8 @@ function itemStyle(
 
 const styles = {
   dot: (color: string) => ({
-    width: "8px",
-    height: "8px",
+    width: "9px",
+    height: "9px",
     borderRadius: "50%",
     backgroundColor: color,
     flexShrink: "0",
@@ -46,12 +46,12 @@ const styles = {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap" as const,
-    color: "#e0e0e0",
+    color: "#eaeaf5",
   },
   badge: {
     fontSize: "10px",
-    color: "#8888a0",
-    backgroundColor: "#0f3460",
+    color: "#6b6b88",
+    backgroundColor: "#1e2a50",
     padding: "1px 6px",
     borderRadius: "8px",
     flexShrink: "0",
