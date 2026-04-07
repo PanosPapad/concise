@@ -12,10 +12,7 @@ function copyFile(src, dest) {
 
 function copyDir(src, dest) {
   if (!fs.existsSync(src)) return;
-  fs.mkdirSync(dest, { recursive: true });
-  for (const entry of fs.readdirSync(src)) {
-    copyFile(path.join(src, entry), path.join(dest, entry));
-  }
+  fs.cpSync(src, dest, { recursive: true });
 }
 
 async function build() {
