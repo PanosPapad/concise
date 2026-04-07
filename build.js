@@ -10,8 +10,20 @@ function copyFile(src, dest) {
   fs.copyFileSync(src, dest);
 }
 
+function copyDir(src, dest) {
+  if (!fs.existsSync(src)) return;
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src)) {
+    copyFile(path.join(src, entry), path.join(dest, entry));
+  }
+}
+
 async function build() {
   // Copy static assets
+  copyDir(
+    path.resolve(__dirname, "icons"),
+    path.resolve(distDir, "icons")
+  );
   copyFile(
     path.resolve(__dirname, "manifest.json"),
     path.resolve(distDir, "manifest.json")
