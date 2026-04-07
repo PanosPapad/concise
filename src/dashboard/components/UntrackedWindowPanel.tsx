@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { UntrackedWindow, NEW_WORKSPACE_COLORS } from "../../shared/types";
 import { createWorkspace } from "../../shared/workspace-manager";
-import { getDomain } from "../utils";
+import { TabRow } from "./TabRow";
 
 interface Props {
   window: UntrackedWindow;
@@ -114,44 +114,6 @@ const styles = {
     overflow: "hidden" as const,
     boxShadow: "inset 0 1px 3px rgba(0,0,0,0.3)",
   },
-  tabRow: (isHovered: boolean) => ({
-    display: "flex" as const,
-    alignItems: "center" as const,
-    gap: "10px",
-    padding: "12px 16px",
-    fontSize: "13px",
-    color: "#c0c0d0",
-    borderBottom: "1px solid #1e2a50",
-    backgroundColor: isHovered ? "#1c2545" : "transparent",
-    transition: "background-color 0.1s",
-  }),
-  tabFavicon: {
-    width: "14px",
-    height: "14px",
-    borderRadius: "2px",
-    flexShrink: "0",
-  },
-  tabFaviconFallback: {
-    width: "14px",
-    height: "14px",
-    borderRadius: "2px",
-    backgroundColor: "#333",
-    flexShrink: "0",
-  },
-  tabTitle: {
-    flex: "1",
-    minWidth: "0",
-    overflow: "hidden" as const,
-    textOverflow: "ellipsis" as const,
-    whiteSpace: "nowrap" as const,
-  },
-  tabDomain: {
-    fontSize: "12px",
-    color: "#50506a",
-    whiteSpace: "nowrap" as const,
-    flexShrink: "0",
-    minWidth: "80px",
-  },
   emptyTabs: {
     padding: "24px",
     textAlign: "center" as const,
@@ -159,32 +121,6 @@ const styles = {
     fontSize: "13px",
   },
 };
-
-function TabRow({ tab }: { tab: UntrackedWindow["tabs"][number] }) {
-  const [hovered, setHovered] = useState(false);
-
-  return (
-    <div
-      style={styles.tabRow(hovered)}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {tab.favIconUrl ? (
-        <img
-          src={tab.favIconUrl}
-          style={styles.tabFavicon}
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-          }}
-        />
-      ) : (
-        <div style={styles.tabFaviconFallback} />
-      )}
-      <span style={styles.tabTitle}>{tab.title || tab.url}</span>
-      <span style={styles.tabDomain}>{getDomain(tab.url)}</span>
-    </div>
-  );
-}
 
 export function UntrackedWindowPanel({ window: win, onAssigned }: Props) {
   const [name, setName] = useState("");
@@ -259,7 +195,7 @@ export function UntrackedWindowPanel({ window: win, onAssigned }: Props) {
           <div style={styles.emptyTabs}>No tabs in this window</div>
         ) : (
           win.tabs.map((tab, i) => (
-            <TabRow key={`${tab.url}-${i}`} tab={tab} />
+            <TabRow key={`${tab.url}-${i}`} tab={tab} showTime={false} />
           ))
         )}
       </div>
