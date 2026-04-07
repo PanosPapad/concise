@@ -164,9 +164,11 @@ export function BackupHistoryPanel({ onClose, onRefresh }: Props) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    getAllBackups().then((list) => {
-      setBackups([...list].reverse());
-    });
+    getAllBackups()
+      .then((list) => {
+        setBackups([...list].reverse());
+      })
+      .catch(console.error);
   }, []);
 
   const handleRestoreAll = async (timestamp: number) => {
@@ -194,8 +196,6 @@ export function BackupHistoryPanel({ onClose, onRefresh }: Props) {
       setLoading(false);
     }
   };
-
-  const selectedBackup = backups.find((b) => b.timestamp === selectedTimestamp);
 
   return (
     <div style={styles.container}>

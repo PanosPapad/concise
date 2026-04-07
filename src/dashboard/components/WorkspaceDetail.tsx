@@ -202,6 +202,15 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
     setNotesValue(workspace.notes ?? "");
   }, [workspace.id, workspace.notes]);
 
+  useEffect(() => {
+    return () => {
+      if (notesDebounceRef.current) {
+        clearTimeout(notesDebounceRef.current);
+        notesDebounceRef.current = null;
+      }
+    };
+  }, []);
+
   const isActive = workspace.windowId !== null;
 
   const act = async (fn: () => Promise<void>) => {
@@ -234,7 +243,7 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
   const saveNotes = (value: string) => {
     if (notesDebounceRef.current) clearTimeout(notesDebounceRef.current);
     notesDebounceRef.current = setTimeout(() => {
-      updateWorkspaceNotes(workspace.id, value);
+      updateWorkspaceNotes(workspace.id, value).catch(console.error);
     }, 600);
   };
 
@@ -243,7 +252,7 @@ export function WorkspaceDetail({ workspace, isCurrent, onRefresh }: Props) {
       clearTimeout(notesDebounceRef.current);
       notesDebounceRef.current = null;
     }
-    updateWorkspaceNotes(workspace.id, notesValue);
+    updateWorkspaceNotes(workspace.id, notesValue).catch(console.error);
   };
 
   const handleDelete = () => {
