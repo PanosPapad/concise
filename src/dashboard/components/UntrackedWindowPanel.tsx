@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { UntrackedWindow, NEW_WORKSPACE_COLORS } from "../../shared/types";
+import { UntrackedWindow, SavedTab, NEW_WORKSPACE_COLORS } from "../../shared/types";
 import { createWorkspace } from "../../shared/workspace-manager";
 import { TabRow } from "./TabRow";
 
@@ -127,6 +127,19 @@ export function UntrackedWindowPanel({ window: win, onAssigned }: Props) {
   const [color, setColor] = useState(NEW_WORKSPACE_COLORS[0]);
   const [loading, setLoading] = useState(false);
 
+  const handleCloseTab = async (tab: SavedTab) => {
+    try {
+      const liveTabs = await chrome.tabs.query({ windowId: win.windowId });
+      const match = liveTabs.find((t) => t.url === tab.url);
+      if (match?.id !== undefined) {
+        await chrome.tabs.remove(match.id);
+        onAssigned(); // refresh to update tab list
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to close tab");
+    }
+  };
+
   const handleAssign = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -195,7 +208,12 @@ export function UntrackedWindowPanel({ window: win, onAssigned }: Props) {
           <div style={styles.emptyTabs}>No tabs in this window</div>
         ) : (
           win.tabs.map((tab, i) => (
-            <TabRow key={`${tab.url}-${i}`} tab={tab} showTime={false} />
+            <TabRow
+              key={`${tab.url}-${i}`}
+              tab={tab}
+              isActive={true}
+              onCloseTab={handleCloseTab}
+            />
           ))
         )}
       </div>
