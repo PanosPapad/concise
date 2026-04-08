@@ -4,7 +4,8 @@
   "scripts": {
     "build": "node build.js",
     "watch": "node build.js --watch",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "package": "npm run clean && npm run build && cd dist && zip -r ../concise.zip ."
   },
   "dependencies": {
     "preact": "^10.25.4"
