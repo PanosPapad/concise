@@ -208,6 +208,9 @@ export function DashboardApp() {
   };
 
   const handleSidebarDelete = (id: string) => {
+    const ws = workspaces.find((w) => w.id === id);
+    if (!ws) return;
+    if (!window.confirm(`Delete workspace "${ws.name}"?`)) return;
     deleteWorkspace(id).then(() => {
       if (selectedWorkspaceId === id) {
         setSelectedWorkspaceId(null);
@@ -243,7 +246,9 @@ export function DashboardApp() {
       restoreWorkspace(id).then(() => loadData());
     },
     onDeleteWorkspace: (id: string) => {
-      if (window.confirm("Delete this workspace?")) {
+      const ws = workspaces.find((w) => w.id === id);
+      if (!ws) return;
+      if (window.confirm(`Delete workspace "${ws.name}"?`)) {
         deleteWorkspace(id).then(() => {
           if (selectedWorkspaceId === id) {
             setSelectedWorkspaceId(null);

@@ -200,7 +200,7 @@ export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(workspace.name);
-  const [confirmAction, setConfirmAction] = useState<null | "delete" | "save-close">(null);
+  const [confirmAction, setConfirmAction] = useState<null | "delete">(null);
   const [nameHovered, setNameHovered] = useState(false);
   const [pencilHovered, setPencilHovered] = useState(false);
   const [groupByDomain, setGroupByDomain] = useState(false);
@@ -292,7 +292,7 @@ export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh
       items.push({ label: "Close Tab", onClick: () => handleCloseTab(tab) });
       items.push({
         label: "Copy URL",
-        onClick: () => { navigator.clipboard.writeText(tab.url); },
+        onClick: () => { navigator.clipboard.writeText(tab.url).catch(() => {}); },
         divider: true,
       });
     } else {
@@ -302,7 +302,7 @@ export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh
       });
       items.push({
         label: "Copy URL",
-        onClick: () => { navigator.clipboard.writeText(tab.url); },
+        onClick: () => { navigator.clipboard.writeText(tab.url).catch(() => {}); },
       });
     }
 
@@ -463,13 +463,9 @@ export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh
       {confirmAction ? (
         <div style={{ marginBottom: "24px" }}>
           <ConfirmBar
-            message={
-              confirmAction === "delete"
-                ? "Delete this workspace?"
-                : "Save and close this window?"
-            }
-            confirmLabel={confirmAction === "delete" ? "Delete" : "Save & Close"}
-            confirmColor={confirmAction === "delete" ? "#DC2626" : "#D97706"}
+            message="Delete this workspace?"
+            confirmLabel="Delete"
+            confirmColor="#DC2626"
             onConfirm={handleConfirmAction}
             onCancel={handleCancelConfirm}
           />

@@ -357,7 +357,7 @@ export function TabRow({
                     setMoveOpen(false);
                     onMoveTab(tab, targetId);
                   }}
-                  onClose={() => setMoveOpen(false)}
+                  onClose={() => { setMoveOpen(false); setHovered(false); }}
                 />
               )}
             </div>

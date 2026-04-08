@@ -38,8 +38,14 @@ export async function exportData(): Promise<string> {
 }
 
 export async function getPreferences(): Promise<{ groupByDomain: boolean }> {
+  const defaults = { groupByDomain: false };
   const result = await chrome.storage.local.get('preferences');
-  return result.preferences || { groupByDomain: false };
+  if (!result.preferences || typeof result.preferences !== 'object') return defaults;
+  return {
+    groupByDomain: typeof result.preferences.groupByDomain === 'boolean'
+      ? result.preferences.groupByDomain
+      : defaults.groupByDomain,
+  };
 }
 
 export async function setPreferences(prefs: { groupByDomain: boolean }): Promise<void> {

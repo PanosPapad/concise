@@ -277,9 +277,12 @@ export async function reorderWorkspaceTo(
   section: 'active' | 'saved',
 ): Promise<void> {
   const all = await getAllWorkspaces();
-  const list = Object.values(all).sort(
-    (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
-  );
+  const list = Object.values(all).sort((a, b) => {
+    const aStarred = a.starred ? 0 : 1;
+    const bStarred = b.starred ? 0 : 1;
+    if (aStarred !== bStarred) return aStarred - bStarred;
+    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+  });
 
   const activeList = list.filter((ws) => ws.windowId !== null);
   const savedList = list.filter((ws) => ws.windowId === null);
@@ -289,7 +292,8 @@ export async function reorderWorkspaceTo(
   if (currentIdx === -1) return;
 
   const [moved] = sectionList.splice(currentIdx, 1);
-  const clampedIndex = Math.max(0, Math.min(newIndex, sectionList.length));
+  const effectiveIndex = newIndex > currentIdx ? newIndex - 1 : newIndex;
+  const clampedIndex = Math.max(0, Math.min(effectiveIndex, sectionList.length));
   sectionList.splice(clampedIndex, 0, moved);
 
   for (let i = 0; i < sectionList.length; i++) {
@@ -335,7 +339,9 @@ export async function removeTabFromWorkspace(
   const workspace = await getWorkspace(workspaceId);
   if (!workspace) return;
 
-  workspace.tabs = workspace.tabs.filter((t) => t.url !== tabUrl);
+  const tabIndex = workspace.tabs.findIndex((t) => t.url === tabUrl);
+  if (tabIndex === -1) return;
+  workspace.tabs.splice(tabIndex, 1);
   await saveWorkspace(workspace);
 
   if (workspace.windowId !== null) {
@@ -358,10 +364,9 @@ export async function moveTabBetweenWorkspaces(
   ]);
   if (!source || !target) return;
 
-  const tab = source.tabs.find((t) => t.url === tabUrl);
-  if (!tab) return;
-
-  source.tabs = source.tabs.filter((t) => t.url !== tabUrl);
+  const tabIndex = source.tabs.findIndex((t) => t.url === tabUrl);
+  if (tabIndex === -1) return;
+  const [tab] = source.tabs.splice(tabIndex, 1);
   target.tabs.push(tab);
 
   await Promise.all([saveWorkspace(source), saveWorkspace(target)]);

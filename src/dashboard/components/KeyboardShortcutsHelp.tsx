@@ -1,12 +1,14 @@
 import { useEffect, useRef } from "preact/hooks";
 
+const mod = navigator.platform?.includes('Mac') ? 'Cmd' : 'Ctrl';
+
 const shortcuts = [
   { key: "/", description: "Open command palette" },
   { key: "Esc", description: "Close overlay / panel" },
   { key: "1-9", description: "Select Nth workspace" },
-  { key: "Ctrl+S", description: "Save selected workspace" },
-  { key: "Ctrl+Enter", description: "Switch to selected workspace" },
-  { key: "Ctrl+N", description: "New workspace" },
+  { key: `${mod}+S`, description: "Save selected workspace" },
+  { key: `${mod}+Enter`, description: "Switch to selected workspace" },
+  { key: `${mod}+N`, description: "New workspace" },
   { key: "d", description: "Delete selected (saved only)" },
   { key: "r", description: "Restore selected (saved only)" },
   { key: "?", description: "Show this help" },

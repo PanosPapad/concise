@@ -149,7 +149,7 @@ export function EmptyState({ variant, untrackedCount, onCreateWorkspace, isActiv
         >
           Create your first workspace
         </button>
-        <p style={styles.hintSmall}>Or press Cmd+N</p>
+        <p style={styles.hintSmall}>Or press Cmd/Ctrl+N</p>
       </div>
     );
   }
