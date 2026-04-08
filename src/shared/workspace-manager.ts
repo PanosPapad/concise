@@ -380,7 +380,12 @@ export async function moveTabBetweenWorkspaces(
   }
 
   if (target.windowId !== null) {
-    await chrome.tabs.create({ windowId: target.windowId, url: tabUrl });
+    await chrome.tabs.create({
+      windowId: target.windowId,
+      url: tab.url,
+      pinned: tab.pinned,
+      active: false,
+    });
   }
 }
 

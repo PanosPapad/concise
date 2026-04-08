@@ -1,9 +1,22 @@
-interface EmptyStateProps {
-  variant: 'welcome' | 'untracked-hint' | 'no-selection' | 'no-tabs';
-  untrackedCount?: number;
-  onCreateWorkspace?: () => void;
-  isActive?: boolean;
-}
+type EmptyStateProps =
+  | {
+      variant: 'welcome';
+      onCreateWorkspace: () => void;
+      untrackedCount?: never;
+      isActive?: boolean;
+    }
+  | {
+      variant: 'untracked-hint';
+      onCreateWorkspace: () => void;
+      untrackedCount?: number;
+      isActive?: boolean;
+    }
+  | {
+      variant: 'no-selection' | 'no-tabs';
+      onCreateWorkspace?: never;
+      untrackedCount?: never;
+      isActive?: boolean;
+    };
 
 const styles = {
   wrapper: {

@@ -97,13 +97,7 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
       // 1-9: select Nth workspace
       if (e.key >= "1" && e.key <= "9") {
         const idx = parseInt(e.key, 10) - 1;
-        const active = actions.workspaces
-          .filter((ws) => ws.windowId !== null)
-          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-        const saved = actions.workspaces
-          .filter((ws) => ws.windowId === null)
-          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-        const combined = [...active, ...saved];
+        const combined = actions.workspaces;
         if (idx < combined.length) {
           actions.onSelectWorkspace(combined[idx].id);
         }
