@@ -279,9 +279,11 @@ export function CommandPalette({ workspaces, onClose, onRefresh, commands }: Pro
       onClose();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
+      if (items.length === 0) return;
       setSelectedIndex((i) => Math.min(i + 1, items.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      if (items.length === 0) return;
       setSelectedIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();

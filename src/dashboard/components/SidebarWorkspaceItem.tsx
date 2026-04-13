@@ -206,7 +206,10 @@ export function SidebarWorkspaceItem({
   return (
     <div
       draggable={!selectionMode}
-      style={itemStyle(isSelected && !selectionMode, hovered, isDragging, workspace.color, dropIndicator, dragColor)}
+      style={{
+        ...itemStyle(isSelected && !selectionMode, hovered, isDragging, workspace.color, dropIndicator, dragColor),
+        cursor: selectionMode ? "pointer" : undefined,
+      }}
       onClick={handleClick}
       onContextMenu={(e: MouseEvent) => {
         if (onContextMenu) {

@@ -15,7 +15,6 @@ export interface ShortcutActions {
   onSwitchWorkspace: (id: string) => void;
   onRestoreWorkspace: (id: string) => void;
   onDeleteWorkspace: (id: string) => void;
-  onShowHelp: () => void;
   // New shortcuts
   onToggleLock: (id: string) => void;
   onToggleStar: (id: string) => void;
@@ -120,21 +119,23 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
         return;
       }
 
+      const key = e.key.toLowerCase();
+
       // Shift+S: save all active (no Cmd needed)
-      if (e.key === "S" && e.shiftKey) {
+      if (key === "s" && e.shiftKey) {
         e.preventDefault();
         actions.onSaveAllActive();
         return;
       }
 
       // c: open create panel (replaces Cmd+N which Chrome intercepts)
-      if (e.key === "c") {
+      if (key === "c") {
         actions.onOpenCreatePanel();
         return;
       }
 
       // Selection mode toggle
-      if (e.key === "m") {
+      if (key === "m") {
         actions.onToggleSelectionMode();
         return;
       }
@@ -145,49 +146,49 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
           (w) => w.id === actions.selectedWorkspaceId,
         );
 
-        if (e.key === "d") {
+        if (key === "d") {
           if (ws && ws.windowId === null) {
             actions.onDeleteWorkspace(actions.selectedWorkspaceId);
           }
           return;
         }
 
-        if (e.key === "r") {
+        if (key === "r") {
           if (ws && ws.windowId === null) {
             actions.onRestoreWorkspace(actions.selectedWorkspaceId);
           }
           return;
         }
 
-        if (e.key === "w") {
+        if (key === "w") {
           if (ws && ws.windowId !== null) {
             actions.onSaveWorkspace(actions.selectedWorkspaceId);
           }
           return;
         }
 
-        if (e.key === "l") {
+        if (key === "l") {
           actions.onToggleLock(actions.selectedWorkspaceId);
           return;
         }
 
-        if (e.key === "s") {
+        if (key === "s") {
           actions.onToggleStar(actions.selectedWorkspaceId);
           return;
         }
 
-        if (e.key === "n") {
+        if (key === "n") {
           actions.onFocusNotes();
           return;
         }
       }
 
-      if (e.key === "e") {
+      if (key === "e") {
         actions.onExport();
         return;
       }
 
-      if (e.key === "b") {
+      if (key === "b") {
         actions.onToggleBackupHistory();
         return;
       }

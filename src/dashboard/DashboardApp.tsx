@@ -203,9 +203,7 @@ export function DashboardApp() {
         setStorageError(changes._lastStorageError.newValue.message);
         setTimeout(() => setStorageError(null), 10000);
       }
-      if (changes._storageWarning?.newValue) {
-        setStoragePercent(changes._storageWarning.newValue.percentUsed);
-      }
+      getStorageUsage().then(u => setStoragePercent(u.percentUsed)).catch(() => {});
     };
     chrome.storage.onChanged.addListener(listener);
     return () => chrome.storage.onChanged.removeListener(listener);
@@ -246,12 +244,16 @@ export function DashboardApp() {
     setRenameTargetId(id);
   };
 
+  // Clear selection when leaving selection mode
+  useEffect(() => {
+    if (!selectionMode) {
+      setSelectedIds(new Set());
+    }
+  }, [selectionMode]);
+
   // Selection mode helpers
   const toggleSelectionMode = useCallback(() => {
-    setSelectionMode((prev) => {
-      if (prev) setSelectedIds(new Set());
-      return !prev;
-    });
+    setSelectionMode((prev) => !prev);
   }, []);
 
   const toggleSelected = useCallback((id: string) => {
@@ -266,10 +268,20 @@ export function DashboardApp() {
     });
   }, []);
 
+  const filteredWorkspaces = useMemo(
+    () =>
+      searchQuery.trim()
+        ? workspaces.filter((ws) =>
+            ws.name.toLowerCase().includes(searchQuery.toLowerCase()),
+          )
+        : workspaces,
+    [workspaces, searchQuery],
+  );
+
   const selectAll = useCallback(() => {
-    const allIds = new Set(workspaces.map((ws) => ws.id));
+    const allIds = new Set(filteredWorkspaces.map((ws) => ws.id));
     setSelectedIds(allIds);
-  }, [workspaces]);
+  }, [filteredWorkspaces]);
 
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
@@ -365,23 +377,23 @@ export function DashboardApp() {
   // Arrow key navigation
   const handleNavigateWorkspace = useCallback(
     (direction: "up" | "down") => {
-      if (workspaces.length === 0) return;
+      if (filteredWorkspaces.length === 0) return;
       if (!selectedWorkspaceId) {
-        handleSelectWorkspace(workspaces[0].id);
+        handleSelectWorkspace(filteredWorkspaces[0].id);
         return;
       }
-      const idx = workspaces.findIndex((ws) => ws.id === selectedWorkspaceId);
+      const idx = filteredWorkspaces.findIndex((ws) => ws.id === selectedWorkspaceId);
       if (idx === -1) {
-        handleSelectWorkspace(workspaces[0].id);
+        handleSelectWorkspace(filteredWorkspaces[0].id);
         return;
       }
       const nextIdx =
         direction === "up"
-          ? (idx - 1 + workspaces.length) % workspaces.length
-          : (idx + 1) % workspaces.length;
-      handleSelectWorkspace(workspaces[nextIdx].id);
+          ? (idx - 1 + filteredWorkspaces.length) % filteredWorkspaces.length
+          : (idx + 1) % filteredWorkspaces.length;
+      handleSelectWorkspace(filteredWorkspaces[nextIdx].id);
     },
-    [workspaces, selectedWorkspaceId],
+    [filteredWorkspaces, selectedWorkspaceId],
   );
 
   const handleExport = async () => {
@@ -435,7 +447,7 @@ export function DashboardApp() {
   };
 
   // Keyboard shortcuts
-  const { showHelpOverlay, setShowHelpOverlay } = useKeyboardShortcuts({
+  const shortcutActions = useMemo(() => ({
     workspaces,
     selectedWorkspaceId,
     onSelectWorkspace: handleSelectWorkspace,
@@ -466,8 +478,6 @@ export function DashboardApp() {
         });
       }
     },
-    onShowHelp: () => setShowHelpOverlay(true),
-    // New shortcut handlers
     onToggleLock: (id: string) => {
       toggleLock(id).then(() => loadData());
     },
@@ -484,7 +494,13 @@ export function DashboardApp() {
     isSelectionMode: selectionMode,
     onSelectAll: selectAll,
     onSaveAllActive: handleSaveAllActive,
-  });
+  }), [
+    workspaces, selectedWorkspaceId, paletteOpen, showCreatePanel,
+    handleExport, handleNavigateWorkspace, toggleSelectionMode,
+    selectionMode, selectAll, handleSaveAllActive,
+  ]);
+
+  const { showHelpOverlay, setShowHelpOverlay } = useKeyboardShortcuts(shortcutActions);
 
   const handleImport = () => {
     fileInputRef.current?.click();
@@ -681,12 +697,6 @@ export function DashboardApp() {
   const selectedUntracked = untrackedWindows.find(
     (uw) => uw.windowId === selectedUntrackedId,
   );
-
-  const filteredWorkspaces = searchQuery.trim()
-    ? workspaces.filter((ws) =>
-        ws.name.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : workspaces;
 
   return (
     <div style={styles.container}>

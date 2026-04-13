@@ -216,7 +216,9 @@ export async function deleteWorkspace(id: string): Promise<void> {
 export async function saveAllWorkspaces(
   workspaces: Record<string, Workspace>,
 ): Promise<void> {
-  await safeSet({ [STORAGE_KEY]: workspaces });
+  return withWriteLock(async () => {
+    await safeSet({ [STORAGE_KEY]: workspaces });
+  });
 }
 
 export async function exportData(): Promise<string> {

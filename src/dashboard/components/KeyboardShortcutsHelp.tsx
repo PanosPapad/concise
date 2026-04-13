@@ -153,7 +153,7 @@ export function KeyboardShortcutsHelp({ onClose }: KeyboardShortcutsHelpProps) {
           </div>
         ))}
         <div style={styles.hint}>
-          Press <kbd style={styles.kbd}>?</kbd> anytime to toggle this help
+          Press <kbd style={styles.kbd}>?</kbd> to toggle this help
         </div>
       </div>
     </div>

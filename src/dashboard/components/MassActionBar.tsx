@@ -4,6 +4,7 @@ export interface MassActionBarProps {
   selectedCount: number;
   activeSelectedCount: number;
   savedSelectedCount: number;
+  deletableCount: number;
   hasLockedSelected: boolean;
   onSave: () => void;
   onRestore: () => void;
@@ -86,6 +87,7 @@ export function MassActionBar({
   selectedCount,
   activeSelectedCount,
   savedSelectedCount,
+  deletableCount,
   hasLockedSelected,
   onSave,
   onRestore,
@@ -98,12 +100,12 @@ export function MassActionBar({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const handleDelete = () => {
-    if (confirmingDelete) {
-      onDelete();
-      setConfirmingDelete(false);
-    } else {
-      setConfirmingDelete(true);
-    }
+    setConfirmingDelete(true);
+  };
+
+  const handleConfirmDelete = () => {
+    setConfirmingDelete(false);
+    onDelete();
   };
 
   return (
@@ -126,7 +128,7 @@ export function MassActionBar({
       {confirmingDelete ? (
         <div style={styles.confirmRow}>
           <span style={styles.confirmLabel}>
-            Delete {savedSelectedCount} workspace{savedSelectedCount !== 1 ? "s" : ""}?
+            Delete {deletableCount} workspace{deletableCount !== 1 ? "s" : ""}?
           </span>
           <button
             style={styles.confirmBtn(false)}
@@ -134,7 +136,7 @@ export function MassActionBar({
           >
             No
           </button>
-          <button style={styles.confirmBtn(true)} onClick={onDelete}>
+          <button style={styles.confirmBtn(true)} onClick={handleConfirmDelete}>
             Delete
           </button>
         </div>
@@ -155,11 +157,11 @@ export function MassActionBar({
             Restore ({savedSelectedCount})
           </button>
           <button
-            style={styles.actionBtn("#DC2626", savedSelectedCount === 0)}
-            disabled={savedSelectedCount === 0}
+            style={styles.actionBtn("#DC2626", deletableCount === 0)}
+            disabled={deletableCount === 0}
             onClick={handleDelete}
           >
-            Delete
+            Delete ({deletableCount})
           </button>
           <button
             style={styles.actionBtn("#D97706", false)}

@@ -269,6 +269,7 @@ export function Sidebar({
   const activeSelectedCount = activeWorkspaces.filter((ws) => selectedIds.has(ws.id)).length;
   const savedSelectedCount = savedWorkspaces.filter((ws) => selectedIds.has(ws.id)).length;
   const hasLockedSelected = workspaces.some((ws) => selectedIds.has(ws.id) && ws.locked);
+  const deletableCount = savedWorkspaces.filter((ws) => selectedIds.has(ws.id) && !ws.locked).length;
 
   const draggedWorkspace = draggedId ? workspaces.find((ws) => ws.id === draggedId) : null;
   const draggedSection: "active" | "saved" | null = draggedWorkspace
@@ -464,9 +465,10 @@ export function Sidebar({
 
       {selectionMode && selectedIds.size > 0 && (
         <MassActionBar
-          selectedCount={selectedIds.size}
+          selectedCount={activeSelectedCount + savedSelectedCount}
           activeSelectedCount={activeSelectedCount}
           savedSelectedCount={savedSelectedCount}
+          deletableCount={deletableCount}
           hasLockedSelected={hasLockedSelected}
           onSave={onMassSave}
           onRestore={onMassRestore}
