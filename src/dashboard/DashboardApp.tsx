@@ -731,7 +731,6 @@ export function DashboardApp() {
         onMassUnlock={handleMassUnlock}
         onMassStar={handleMassStar}
         storagePercent={storagePercent}
-        onPanicRestore={handlePanicRestore}
         onExportBookmarks={handleExportBookmarks}
       />
 

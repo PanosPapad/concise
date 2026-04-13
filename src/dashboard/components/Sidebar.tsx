@@ -36,7 +36,6 @@ interface Props {
   onMassUnlock: () => void;
   onMassStar: () => void;
   storagePercent?: number;
-  onPanicRestore?: () => void;
   onExportBookmarks?: () => void;
 }
 
@@ -257,7 +256,6 @@ export function Sidebar({
   onMassUnlock,
   onMassStar,
   storagePercent,
-  onPanicRestore,
   onExportBookmarks,
 }: Props) {
   const [untrackedExpanded, setUntrackedExpanded] = useState(true);
@@ -481,30 +479,7 @@ export function Sidebar({
       )}
 
       <div style={{ ...styles.footer, flexDirection: 'column' as const, alignItems: 'stretch' }}>
-        {onPanicRestore && (
-          <button
-            onClick={onPanicRestore}
-            title="Restore all saved workspaces as Chrome windows"
-            style={{
-              width: '100%',
-              padding: '6px 8px',
-              marginBottom: '6px',
-              background: 'rgba(220, 38, 38, 0.15)',
-              border: '1px solid rgba(220, 38, 38, 0.3)',
-              borderRadius: '4px',
-              color: '#fca5a5',
-              fontSize: '11px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-            }}
-          >
-            Restore All to Windows
-          </button>
-        )}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' as const }}>
           <button style={styles.footerBtn} onClick={onExport}>
             Export
           </button>
@@ -512,16 +487,9 @@ export function Sidebar({
             <button
               onClick={onExportBookmarks}
               title="Export as browser bookmarks (HTML)"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#8888a0',
-                cursor: 'pointer',
-                fontSize: '11px',
-                padding: '2px 6px',
-              }}
+              style={styles.footerBtn}
             >
-              Bookmarks
+              HTML
             </button>
           )}
           <button style={styles.footerBtn} onClick={onImport}>
