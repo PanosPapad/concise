@@ -7,6 +7,10 @@ import {
   deleteWorkspace as removeWorkspace,
 } from './storage';
 
+export function isRestorableUrl(url: string | undefined): boolean {
+  return !!url && url !== '' && !url.startsWith('chrome://') && !url.startsWith('chrome-extension://');
+}
+
 function isDegradedUrl(newUrl: string, oldUrl: string): boolean {
   try {
     const a = new URL(newUrl);
@@ -37,10 +41,7 @@ export async function snapshotTabs(
   }
 
   return tabs
-    .filter((tab) => {
-      const url = tab.url ?? '';
-      return url !== '' && !url.startsWith('chrome://') && !url.startsWith('chrome-extension://');
-    })
+    .filter((tab) => isRestorableUrl(tab.url))
     .map((tab) => {
       let url = tab.url ?? '';
       // Guard against Chrome's tab-sleep URL degradation for SPAs (e.g. Gemini)
@@ -109,10 +110,7 @@ export async function restoreWorkspace(id: string): Promise<void> {
   const workspace = await getWorkspace(id);
   if (!workspace) return;
 
-  const restorableTabs = workspace.tabs.filter((t) => {
-    const url = t.url ?? '';
-    return url !== '' && !url.startsWith('chrome://') && !url.startsWith('chrome-extension://');
-  });
+  const restorableTabs = workspace.tabs.filter((t) => isRestorableUrl(t.url));
   const firstTab = restorableTabs[0];
   if (!firstTab) {
     throw new Error('Workspace has no restorable tabs');
@@ -167,13 +165,28 @@ export async function saveWorkspaceToStorage(id: string): Promise<void> {
   if (!workspace || workspace.windowId === null) return;
 
   const windowId = workspace.windowId;
+  // Snapshot tabs before closing so we have the latest state
   const tabs = await snapshotTabs(windowId, workspace.tabs);
 
+  // Attempt to close the window first
+  await chrome.windows.remove(windowId);
+
+  // Verify the window is actually gone
+  try {
+    await chrome.windows.get(windowId);
+    // Window still exists — user likely rejected a "Leave site?" dialog
+    throw new Error('Window could not be closed — a tab may have prevented it');
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('could not be closed')) {
+      throw err; // Re-throw our own error
+    }
+    // chrome.windows.get threw because window doesn't exist — this is the success path
+  }
+
+  // Window is confirmed closed — now persist the saved state
   workspace.tabs = tabs;
   workspace.windowId = null;
   await saveWorkspace(workspace);
-
-  await chrome.windows.remove(windowId);
 }
 
 export async function deleteWorkspace(id: string): Promise<void> {
@@ -318,10 +331,7 @@ export async function getUntrackedWindows(): Promise<UntrackedWindow[]> {
     .map((win) => ({
       windowId: win.id!,
       tabs: (win.tabs ?? [])
-        .filter((tab) => {
-          const url = tab.url ?? '';
-          return url !== '' && !url.startsWith('chrome://') && !url.startsWith('chrome-extension://');
-        })
+        .filter((tab) => isRestorableUrl(tab.url))
         .map((tab) => ({
           url: tab.url ?? '',
           title: tab.title ?? '',
@@ -405,4 +415,37 @@ export async function saveCurrentAndSwitch(
 
   await chrome.windows.update(other.windowId!, { focused: true });
   await saveWorkspaceToStorage(currentWorkspaceId);
+}
+
+export interface PanicRestoreResult {
+  restored: string[];
+  failed: Array<{ id: string; name: string; error: string }>;
+  totalTabs: number;
+}
+
+export async function panicRestoreAll(): Promise<PanicRestoreResult> {
+  const workspaces = await getAllWorkspaces();
+  const result: PanicRestoreResult = { restored: [], failed: [], totalTabs: 0 };
+
+  const saved = Object.values(workspaces).filter(ws => ws.windowId === null);
+
+  for (const ws of saved) {
+    try {
+      const tabCount = ws.tabs.filter(t => isRestorableUrl(t.url)).length;
+      if (tabCount === 0) continue;
+      await restoreWorkspace(ws.id);
+      result.restored.push(ws.id);
+      result.totalTabs += tabCount;
+      // Delay between windows to avoid overwhelming Chrome
+      await new Promise(r => setTimeout(r, 500));
+    } catch (err) {
+      result.failed.push({
+        id: ws.id,
+        name: ws.name,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return result;
 }

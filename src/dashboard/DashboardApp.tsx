@@ -10,8 +10,9 @@ import {
   createWorkspace,
   toggleLock,
   toggleStar,
+  panicRestoreAll,
 } from "../shared/workspace-manager";
-import { exportData, importData } from "../shared/storage";
+import { exportData, importData, exportAsBookmarksHtml, getStorageUsage, getAllWorkspaces } from "../shared/storage";
 import { Sidebar } from "./components/Sidebar";
 import { WorkspaceDetail } from "./components/WorkspaceDetail";
 import { UntrackedWindowPanel } from "./components/UntrackedWindowPanel";
@@ -165,6 +166,8 @@ export function DashboardApp() {
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [inlineColor, setInlineColor] = useState("#4F46E5");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [storagePercent, setStoragePercent] = useState(0);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
 
@@ -188,10 +191,21 @@ export function DashboardApp() {
     });
   }, []);
 
-  // Live updates when storage changes
+  // Live updates + storage usage + error listeners (single onChanged listener)
   useEffect(() => {
-    const listener = () => {
-      loadData();
+    getStorageUsage().then(u => setStoragePercent(u.percentUsed)).catch(() => {});
+
+    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if (changes.workspaces) {
+        loadData();
+      }
+      if (changes._lastStorageError?.newValue) {
+        setStorageError(changes._lastStorageError.newValue.message);
+        setTimeout(() => setStorageError(null), 10000);
+      }
+      if (changes._storageWarning?.newValue) {
+        setStoragePercent(changes._storageWarning.newValue.percentUsed);
+      }
     };
     chrome.storage.onChanged.addListener(listener);
     return () => chrome.storage.onChanged.removeListener(listener);
@@ -382,6 +396,44 @@ export function DashboardApp() {
     URL.revokeObjectURL(url);
   };
 
+  const handlePanicRestore = async () => {
+    const all = await getAllWorkspaces();
+    const saved = Object.values(all).filter(ws => ws.windowId === null);
+    const tabCount = saved.reduce((sum, ws) => sum + ws.tabs.length, 0);
+
+    if (saved.length === 0) {
+      window.alert('No saved workspaces to restore.');
+      return;
+    }
+
+    if (!window.confirm(
+      `Restore ALL ${saved.length} saved workspaces as Chrome windows?\n\nThis will open ${saved.length} windows with ${tabCount} total tabs.`
+    )) return;
+
+    try {
+      const result = await panicRestoreAll();
+      await loadData();
+      if (result.failed.length > 0) {
+        window.alert(
+          `Restored ${result.restored.length} workspaces (${result.totalTabs} tabs).\n\nFailed: ${result.failed.map(f => f.name).join(', ')}`
+        );
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Panic restore failed');
+    }
+  };
+
+  const handleExportBookmarks = async () => {
+    const html = await exportAsBookmarksHtml();
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `concise-bookmarks-${new Date().toISOString().split('T')[0]}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Keyboard shortcuts
   const { showHelpOverlay, setShowHelpOverlay } = useKeyboardShortcuts({
     workspaces,
@@ -557,7 +609,19 @@ export function DashboardApp() {
         setShowHelpOverlay(true);
       },
     },
-  ], [selectedWorkspaceId, workspaces, handleSaveAllActive, handleExport]);
+    {
+      name: "panic-restore",
+      aliases: ["restore-all", "emergency"],
+      description: "Restore ALL saved workspaces as Chrome windows",
+      execute: handlePanicRestore,
+    },
+    {
+      name: "export-bookmarks",
+      aliases: ["bookmarks"],
+      description: "Export all workspaces as browser bookmarks HTML",
+      execute: handleExportBookmarks,
+    },
+  ], [selectedWorkspaceId, workspaces, handleSaveAllActive, handleExport, handlePanicRestore, handleExportBookmarks]);
 
   const handleFileSelected = async (e: Event) => {
     const input = e.target as HTMLInputElement;
@@ -626,6 +690,18 @@ export function DashboardApp() {
 
   return (
     <div style={styles.container}>
+      {storageError && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 10000,
+          padding: '10px 16px', backgroundColor: '#dc2626', color: '#fff',
+          fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <span>{storageError}</span>
+          <button onClick={() => setStorageError(null)} style={{
+            background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '16px',
+          }}>×</button>
+        </div>
+      )}
       <Sidebar
         workspaces={filteredWorkspaces}
         untrackedWindows={untrackedWindows}
@@ -654,6 +730,9 @@ export function DashboardApp() {
         onMassLock={handleMassLock}
         onMassUnlock={handleMassUnlock}
         onMassStar={handleMassStar}
+        storagePercent={storagePercent}
+        onPanicRestore={handlePanicRestore}
+        onExportBookmarks={handleExportBookmarks}
       />
 
       <div style={styles.mainArea}>

@@ -35,6 +35,9 @@ interface Props {
   onMassLock: () => void;
   onMassUnlock: () => void;
   onMassStar: () => void;
+  storagePercent?: number;
+  onPanicRestore?: () => void;
+  onExportBookmarks?: () => void;
 }
 
 const styles = {
@@ -253,6 +256,9 @@ export function Sidebar({
   onMassLock,
   onMassUnlock,
   onMassStar,
+  storagePercent,
+  onPanicRestore,
+  onExportBookmarks,
 }: Props) {
   const [untrackedExpanded, setUntrackedExpanded] = useState(true);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -474,19 +480,70 @@ export function Sidebar({
         />
       )}
 
-      <div style={styles.footer}>
-        <button style={styles.footerBtn} onClick={onExport}>
-          Export
-        </button>
-        <button style={styles.footerBtn} onClick={onImport}>
-          Import
-        </button>
-        <button style={styles.footerBtn} onClick={onShowHistory}>
-          History
-        </button>
-        <button style={styles.footerBtn} onClick={onShowHelp} title="Keyboard shortcuts (?)">
-          ?
-        </button>
+      <div style={{ ...styles.footer, flexDirection: 'column' as const, alignItems: 'stretch' }}>
+        {onPanicRestore && (
+          <button
+            onClick={onPanicRestore}
+            title="Restore all saved workspaces as Chrome windows"
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              marginBottom: '6px',
+              background: 'rgba(220, 38, 38, 0.15)',
+              border: '1px solid rgba(220, 38, 38, 0.3)',
+              borderRadius: '4px',
+              color: '#fca5a5',
+              fontSize: '11px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+            }}
+          >
+            Restore All to Windows
+          </button>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '6px' }}>
+          <button style={styles.footerBtn} onClick={onExport}>
+            Export
+          </button>
+          {onExportBookmarks && (
+            <button
+              onClick={onExportBookmarks}
+              title="Export as browser bookmarks (HTML)"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#8888a0',
+                cursor: 'pointer',
+                fontSize: '11px',
+                padding: '2px 6px',
+              }}
+            >
+              Bookmarks
+            </button>
+          )}
+          <button style={styles.footerBtn} onClick={onImport}>
+            Import
+          </button>
+          <button style={styles.footerBtn} onClick={onShowHistory}>
+            History
+          </button>
+          <button style={styles.footerBtn} onClick={onShowHelp} title="Keyboard shortcuts (?)">
+            ?
+          </button>
+        </div>
+        {storagePercent !== undefined && storagePercent > 0 && (
+          <div style={{
+            fontSize: '10px',
+            color: storagePercent > 95 ? '#ef4444' : storagePercent > 80 ? '#f59e0b' : '#555',
+            textAlign: 'center',
+            marginTop: '4px',
+          }}>
+            Storage: {storagePercent}%
+          </div>
+        )}
       </div>
 
       {contextMenu && (

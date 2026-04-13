@@ -68,23 +68,6 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
 
       // Cmd/Ctrl combos work even in inputs
       if (e.metaKey || e.ctrlKey) {
-        if (e.key === "s" && e.shiftKey) {
-          e.preventDefault();
-          actions.onSaveAllActive();
-          return;
-        }
-        if (e.key === "s") {
-          e.preventDefault();
-          if (actions.selectedWorkspaceId) {
-            const ws = actions.workspaces.find(
-              (w) => w.id === actions.selectedWorkspaceId,
-            );
-            if (ws && ws.windowId !== null) {
-              actions.onSaveWorkspace(actions.selectedWorkspaceId);
-            }
-          }
-          return;
-        }
         if (e.key === "Enter") {
           e.preventDefault();
           if (actions.selectedWorkspaceId) {

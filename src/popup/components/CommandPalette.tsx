@@ -243,7 +243,7 @@ export function CommandPalette({ workspaces, onClose, onRefresh, commands }: Pro
       }
 
       // Normal search mode: switch/restore workspace or activate tab
-      const ws = item.type === "workspace" ? item.workspace : item.workspace;
+      const ws = item.workspace;
       if (ws.windowId !== null) {
         await switchToWorkspace(ws.id);
         if (item.type === "tab" && item.tabIndex !== undefined) {
