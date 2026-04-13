@@ -85,6 +85,7 @@ export interface IntegrityReport {
   workspaceCount: number;
   repaired: string[];
   errors: string[];
+  previouslyActive: string[];
 }
 
 function normalizeWorkspaceFields(ws: Record<string, unknown>): void {
@@ -99,7 +100,7 @@ function normalizeWorkspaceFields(ws: Record<string, unknown>): void {
 }
 
 export async function validateAndRepairStorage(): Promise<IntegrityReport> {
-  const report: IntegrityReport = { valid: true, workspaceCount: 0, repaired: [], errors: [] };
+  const report: IntegrityReport = { valid: true, workspaceCount: 0, repaired: [], errors: [], previouslyActive: [] };
   try {
     const result = await safeGet(STORAGE_KEY);
     const raw = result[STORAGE_KEY];
@@ -127,6 +128,9 @@ export async function validateAndRepairStorage(): Promise<IntegrityReport> {
       ws.tabs = (ws.tabs as Array<Record<string, unknown>>).filter(tab =>
         typeof tab.url === 'string' && (tab.url as string).length > 0
       );
+      if (ws.windowId !== null) {
+        report.previouslyActive.push(ws.id as string);
+      }
       ws.windowId = null; // Clear stale window associations
       repaired[id] = ws as unknown as Workspace;
     }
@@ -226,20 +230,32 @@ export async function exportData(): Promise<string> {
   return JSON.stringify(workspaces, null, 2);
 }
 
-export async function getPreferences(): Promise<{ groupByDomain: boolean }> {
-  const defaults = { groupByDomain: false };
+export interface Preferences {
+  groupByDomain: boolean;
+  autoRestoreOnStartup: boolean;
+}
+
+export const DEFAULT_PREFERENCES: Preferences = {
+  groupByDomain: false,
+  autoRestoreOnStartup: true,
+};
+
+export async function getPreferences(): Promise<Preferences> {
   const result = await safeGet('preferences');
   const prefs = result.preferences;
-  if (!prefs || typeof prefs !== 'object') return defaults;
+  if (!prefs || typeof prefs !== 'object') return DEFAULT_PREFERENCES;
   const p = prefs as Record<string, unknown>;
   return {
     groupByDomain: typeof p.groupByDomain === 'boolean'
       ? p.groupByDomain
-      : defaults.groupByDomain,
+      : DEFAULT_PREFERENCES.groupByDomain,
+    autoRestoreOnStartup: typeof p.autoRestoreOnStartup === 'boolean'
+      ? p.autoRestoreOnStartup
+      : DEFAULT_PREFERENCES.autoRestoreOnStartup,
   };
 }
 
-export async function setPreferences(prefs: { groupByDomain: boolean }): Promise<void> {
+export async function setPreferences(prefs: Preferences): Promise<void> {
   await safeSet({ preferences: prefs });
 }
 

@@ -9,8 +9,9 @@ import {
   getStorageUsage,
   broadcastStorageError,
   withWriteLock,
+  getPreferences,
 } from '../shared/storage';
-import { snapshotTabs, getWorkspaceList } from '../shared/workspace-manager';
+import { snapshotTabs, getWorkspaceList, isRestorableUrl, restoreWorkspace } from '../shared/workspace-manager';
 
 console.log('Concise service worker loaded');
 
@@ -83,6 +84,57 @@ async function syncTabsForWindow(windowId: number): Promise<void> {
   } catch (error) {
     console.error(`[Concise] Failed to sync tabs for window ${windowId}:`, error);
   }
+}
+
+// --- Auto-restore on startup ---
+
+const AUTO_RESTORE_TAB_LIMIT = 30;
+
+async function autoRestorePreviousWorkspaces(ids: string[]): Promise<void> {
+  const workspaces = await getAllWorkspaces();
+  const toRestore = ids
+    .map(id => workspaces[id])
+    .filter((ws): ws is Workspace => ws !== undefined)
+    .filter(ws => ws.tabs.some(t => isRestorableUrl(t.url)));
+
+  const totalTabs = toRestore.reduce(
+    (sum, ws) => sum + ws.tabs.filter(t => isRestorableUrl(t.url)).length, 0
+  );
+
+  if (totalTabs === 0) return;
+
+  if (totalTabs > AUTO_RESTORE_TAB_LIMIT) {
+    await chrome.storage.local.set({
+      _pendingRestore: {
+        workspaceIds: toRestore.map(ws => ws.id),
+        totalTabs,
+        timestamp: Date.now(),
+      },
+    });
+    console.log(`[Concise] ${toRestore.length} workspaces (${totalTabs} tabs) pending user confirmation`);
+    return;
+  }
+
+  const result = { restored: [] as string[], failed: [] as string[] };
+  for (const ws of toRestore) {
+    try {
+      await restoreWorkspace(ws.id);
+      result.restored.push(ws.name);
+      await new Promise(r => setTimeout(r, 500));
+    } catch (err) {
+      result.failed.push(ws.name);
+      console.error(`[Concise] Failed to auto-restore "${ws.name}":`, err);
+    }
+  }
+
+  await chrome.storage.local.set({
+    _lastAutoRestore: {
+      restored: result.restored,
+      failed: result.failed,
+      timestamp: Date.now(),
+    },
+  });
+  console.log(`[Concise] Auto-restored ${result.restored.length} workspaces`);
 }
 
 // --- Window close handler ---
@@ -187,6 +239,14 @@ chrome.runtime.onStartup.addListener(async () => {
       `Storage repaired on startup: ${report.repaired.length} fix(es), ${report.errors.length} error(s)`
     );
   }
+
+  if (report.previouslyActive.length > 0) {
+    const prefs = await getPreferences();
+    if (prefs.autoRestoreOnStartup) {
+      await autoRestorePreviousWorkspaces(report.previouslyActive);
+    }
+  }
+
   chrome.alarms.create('concise-auto-backup', {
     delayInMinutes: 30,
     periodInMinutes: 30,

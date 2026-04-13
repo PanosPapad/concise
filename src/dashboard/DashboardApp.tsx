@@ -12,7 +12,7 @@ import {
   toggleStar,
   panicRestoreAll,
 } from "../shared/workspace-manager";
-import { exportData, importData, exportAsBookmarksHtml, getStorageUsage, getAllWorkspaces } from "../shared/storage";
+import { exportData, importData, exportAsBookmarksHtml, getStorageUsage, getAllWorkspaces, getPreferences, setPreferences } from "../shared/storage";
 import { Sidebar } from "./components/Sidebar";
 import { WorkspaceDetail } from "./components/WorkspaceDetail";
 import { UntrackedWindowPanel } from "./components/UntrackedWindowPanel";
@@ -195,6 +195,20 @@ export function DashboardApp() {
   useEffect(() => {
     getStorageUsage().then(u => setStoragePercent(u.percentUsed)).catch(() => {});
 
+    // Check for pending restore prompt on mount
+    chrome.storage.local.get('_pendingRestore').then(r => {
+      const pending = r._pendingRestore;
+      if (pending) {
+        const doRestore = window.confirm(
+          `${pending.workspaceIds.length} workspaces (${pending.totalTabs} tabs) were open before Chrome closed.\n\nRestore them all?`
+        );
+        if (doRestore) {
+          panicRestoreAll().then(() => loadData());
+        }
+        chrome.storage.local.remove('_pendingRestore');
+      }
+    });
+
     const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
       if (changes.workspaces) {
         loadData();
@@ -202,6 +216,24 @@ export function DashboardApp() {
       if (changes._lastStorageError?.newValue) {
         setStorageError(changes._lastStorageError.newValue.message);
         setTimeout(() => setStorageError(null), 10000);
+      }
+      if (changes._pendingRestore?.newValue) {
+        const { workspaceIds, totalTabs } = changes._pendingRestore.newValue;
+        const doRestore = window.confirm(
+          `${workspaceIds.length} workspaces (${totalTabs} tabs) were open before Chrome closed.\n\nRestore them all?`
+        );
+        if (doRestore) {
+          panicRestoreAll().then(() => loadData());
+        }
+        chrome.storage.local.remove('_pendingRestore');
+      }
+      if (changes._lastAutoRestore?.newValue) {
+        const { restored, failed } = changes._lastAutoRestore.newValue;
+        if (failed.length > 0) {
+          setStorageError(`Auto-restored ${restored.length} workspaces. Failed: ${failed.join(', ')}`);
+        }
+        chrome.storage.local.remove('_lastAutoRestore');
+        loadData();
       }
       getStorageUsage().then(u => setStoragePercent(u.percentUsed)).catch(() => {});
     };
@@ -636,6 +668,17 @@ export function DashboardApp() {
       aliases: ["bookmarks"],
       description: "Export all workspaces as browser bookmarks HTML",
       execute: handleExportBookmarks,
+    },
+    {
+      name: "auto-restore",
+      aliases: ["settings"],
+      description: "Toggle auto-restore workspaces on Chrome startup",
+      execute: async () => {
+        const prefs = await getPreferences();
+        const newVal = !prefs.autoRestoreOnStartup;
+        await setPreferences({ ...prefs, autoRestoreOnStartup: newVal });
+        window.alert(`Auto-restore on startup: ${newVal ? 'ON' : 'OFF'}`);
+      },
     },
   ], [selectedWorkspaceId, workspaces, handleSaveAllActive, handleExport, handlePanicRestore, handleExportBookmarks]);
 
