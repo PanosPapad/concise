@@ -2,6 +2,7 @@ import { useState } from "preact/hooks";
 import { Workspace, UntrackedWindow } from "../../shared/types";
 import { SidebarWorkspaceItem } from "./SidebarWorkspaceItem";
 import { ContextMenu, ContextMenuItem } from "./ContextMenu";
+import { MassActionBar } from "./MassActionBar";
 import { reorderWorkspaceTo } from "../../shared/workspace-manager";
 
 interface Props {
@@ -21,6 +22,19 @@ interface Props {
   onDeleteWorkspace: (id: string) => void;
   onRenameWorkspace: (id: string) => void;
   onShowHistory: () => void;
+  onShowHelp: () => void;
+  // Selection mode
+  selectionMode: boolean;
+  selectedIds: Set<string>;
+  onToggleSelectionMode: () => void;
+  onToggleSelected: (id: string) => void;
+  // Mass actions
+  onMassSave: () => void;
+  onMassRestore: () => void;
+  onMassDelete: () => void;
+  onMassLock: () => void;
+  onMassUnlock: () => void;
+  onMassStar: () => void;
 }
 
 const styles = {
@@ -38,6 +52,12 @@ const styles = {
     padding: "20px 20px 16px",
     borderBottom: "1px solid #1e2a50",
     flexShrink: "0",
+    display: "flex" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+  },
+  headerLeft: {
+    flex: "1",
   },
   logo: {
     fontSize: "18px",
@@ -51,10 +71,31 @@ const styles = {
     color: "#6b6b88",
     marginTop: "2px",
   },
+  selectionToggle: (active: boolean) => ({
+    width: "28px",
+    height: "28px",
+    borderRadius: "6px",
+    border: active ? "1px solid #4F46E5" : "1px solid #1e2a50",
+    backgroundColor: active ? "#4F46E520" : "transparent",
+    color: active ? "#a5b4fc" : "#6b6b88",
+    cursor: "pointer",
+    display: "flex" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    fontSize: "13px",
+    flexShrink: "0",
+    transition: "all 0.15s",
+  }),
   scrollArea: {
     flex: "1",
     overflowY: "auto" as const,
     padding: "12px 0",
+  },
+  sectionLabelRow: {
+    display: "flex" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    padding: "8px 20px 6px",
   },
   sectionLabel: {
     fontSize: "10px",
@@ -62,8 +103,12 @@ const styles = {
     textTransform: "uppercase" as const,
     color: "#6b6b88",
     letterSpacing: "1px",
-    padding: "8px 20px 6px",
     margin: "0",
+  },
+  sectionCount: {
+    fontSize: "9px",
+    color: "#a5b4fc",
+    fontWeight: "500" as const,
   },
   untrackedHeader: {
     display: "flex" as const,
@@ -127,14 +172,14 @@ const styles = {
   footer: {
     display: "flex" as const,
     justifyContent: "center" as const,
-    gap: "8px",
-    padding: "12px 20px",
+    gap: "6px",
+    padding: "12px 16px",
     borderTop: "1px solid #1e2a50",
     flexShrink: "0",
   },
   footerBtn: {
     fontSize: "11px",
-    padding: "6px 16px",
+    padding: "6px 12px",
     borderRadius: "8px",
     border: "1px solid #1e2a50",
     backgroundColor: "transparent",
@@ -197,6 +242,17 @@ export function Sidebar({
   onDeleteWorkspace,
   onRenameWorkspace,
   onShowHistory,
+  onShowHelp,
+  selectionMode,
+  selectedIds,
+  onToggleSelectionMode,
+  onToggleSelected,
+  onMassSave,
+  onMassRestore,
+  onMassDelete,
+  onMassLock,
+  onMassUnlock,
+  onMassStar,
 }: Props) {
   const [untrackedExpanded, setUntrackedExpanded] = useState(true);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -205,6 +261,10 @@ export function Sidebar({
 
   const activeWorkspaces = workspaces.filter((ws) => ws.windowId !== null);
   const savedWorkspaces = workspaces.filter((ws) => ws.windowId === null);
+
+  const activeSelectedCount = activeWorkspaces.filter((ws) => selectedIds.has(ws.id)).length;
+  const savedSelectedCount = savedWorkspaces.filter((ws) => selectedIds.has(ws.id)).length;
+  const hasLockedSelected = workspaces.some((ws) => selectedIds.has(ws.id) && ws.locked);
 
   const draggedWorkspace = draggedId ? workspaces.find((ws) => ws.id === draggedId) : null;
   const draggedSection: "active" | "saved" | null = draggedWorkspace
@@ -290,15 +350,38 @@ export function Sidebar({
     ];
   };
 
+  const renderSectionLabel = (label: string, selectedCount: number) => (
+    <div style={styles.sectionLabelRow}>
+      <span style={styles.sectionLabel}>{label}</span>
+      {selectionMode && selectedCount > 0 && (
+        <span style={styles.sectionCount}>{selectedCount} selected</span>
+      )}
+    </div>
+  );
+
   return (
     <div style={styles.sidebar}>
       <div style={styles.header}>
-        <h1 style={styles.logo}>Concise</h1>
-        <div style={styles.version}>Tab Organiser</div>
+        <div style={styles.headerLeft}>
+          <h1 style={styles.logo}>Concise</h1>
+          <div style={styles.version}>Tab Organiser</div>
+        </div>
+        <button
+          style={styles.selectionToggle(selectionMode)}
+          onClick={onToggleSelectionMode}
+          title={selectionMode ? "Exit selection mode (m)" : "Selection mode (m)"}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+            <rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+            <rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+            <rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        </button>
       </div>
 
       <div style={styles.scrollArea}>
-        <div style={styles.sectionLabel}>Active</div>
+        {renderSectionLabel("Active", activeSelectedCount)}
         {activeWorkspaces.length === 0 && (
           <div style={styles.emptySection}>No active workspaces</div>
         )}
@@ -316,12 +399,15 @@ export function Sidebar({
             onDragEnd={handleDragEnd}
             dropIndicator={getDropIndicator(ws.id)}
             dragColor={draggedWorkspace?.color ?? null}
+            selectionMode={selectionMode}
+            isChecked={selectedIds.has(ws.id)}
+            onToggleChecked={() => onToggleSelected(ws.id)}
           />
         ))}
 
         <div style={{ height: "8px" }} />
 
-        <div style={styles.sectionLabel}>Saved</div>
+        {renderSectionLabel("Saved", savedSelectedCount)}
         {savedWorkspaces.length === 0 && (
           <div style={styles.emptySection}>No saved workspaces</div>
         )}
@@ -339,6 +425,9 @@ export function Sidebar({
             onDragEnd={handleDragEnd}
             dropIndicator={getDropIndicator(ws.id)}
             dragColor={draggedWorkspace?.color ?? null}
+            selectionMode={selectionMode}
+            isChecked={selectedIds.has(ws.id)}
+            onToggleChecked={() => onToggleSelected(ws.id)}
           />
         ))}
 
@@ -369,6 +458,22 @@ export function Sidebar({
         )}
       </div>
 
+      {selectionMode && selectedIds.size > 0 && (
+        <MassActionBar
+          selectedCount={selectedIds.size}
+          activeSelectedCount={activeSelectedCount}
+          savedSelectedCount={savedSelectedCount}
+          hasLockedSelected={hasLockedSelected}
+          onSave={onMassSave}
+          onRestore={onMassRestore}
+          onDelete={onMassDelete}
+          onLock={onMassLock}
+          onUnlock={onMassUnlock}
+          onStar={onMassStar}
+          onCancel={onToggleSelectionMode}
+        />
+      )}
+
       <div style={styles.footer}>
         <button style={styles.footerBtn} onClick={onExport}>
           Export
@@ -378,6 +483,9 @@ export function Sidebar({
         </button>
         <button style={styles.footerBtn} onClick={onShowHistory}>
           History
+        </button>
+        <button style={styles.footerBtn} onClick={onShowHelp} title="Keyboard shortcuts (?)">
+          ?
         </button>
       </div>
 

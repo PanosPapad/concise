@@ -1,17 +1,51 @@
 import { useEffect, useRef } from "preact/hooks";
 
-const mod = navigator.platform?.includes('Mac') ? 'Cmd' : 'Ctrl';
+const mod = navigator.platform?.includes("Mac") ? "Cmd" : "Ctrl";
 
-const shortcuts = [
-  { key: "/", description: "Open command palette" },
-  { key: "Esc", description: "Close overlay / panel" },
-  { key: "1-9", description: "Select Nth workspace" },
-  { key: `${mod}+S`, description: "Save selected workspace" },
-  { key: `${mod}+Enter`, description: "Switch to selected workspace" },
-  { key: `${mod}+N`, description: "New workspace" },
-  { key: "d", description: "Delete selected (saved only)" },
-  { key: "r", description: "Restore selected (saved only)" },
-  { key: "?", description: "Show this help" },
+interface ShortcutSection {
+  title: string;
+  shortcuts: { key: string; description: string }[];
+}
+
+const sections: ShortcutSection[] = [
+  {
+    title: "Navigation",
+    shortcuts: [
+      { key: "↑ / ↓", description: "Move selection up / down" },
+      { key: "1-9", description: "Jump to Nth workspace" },
+      { key: "/", description: "Open command palette" },
+    ],
+  },
+  {
+    title: "Workspace Actions",
+    shortcuts: [
+      { key: `${mod}+S`, description: "Save selected workspace" },
+      { key: `${mod}+Enter`, description: "Switch to workspace" },
+      { key: "d", description: "Delete (saved only)" },
+      { key: "r", description: "Restore (saved only)" },
+      { key: "l", description: "Toggle lock" },
+      { key: "s", description: "Toggle star" },
+      { key: "n", description: "Focus notes" },
+    ],
+  },
+  {
+    title: "Batch Operations",
+    shortcuts: [
+      { key: "m", description: "Toggle selection mode" },
+      { key: `${mod}+A`, description: "Select all (in selection mode)" },
+      { key: `${mod}+Shift+S`, description: "Save all active" },
+    ],
+  },
+  {
+    title: "Panels & Tools",
+    shortcuts: [
+      { key: "b", description: "Backup history" },
+      { key: "e", description: "Export data" },
+      { key: `${mod}+N`, description: "New workspace" },
+      { key: "?", description: "This help" },
+      { key: "Esc", description: "Close / exit mode" },
+    ],
+  },
 ];
 
 const styles = {
@@ -25,38 +59,62 @@ const styles = {
     zIndex: 9999,
   },
   card: {
-    maxWidth: "400px",
+    maxWidth: "520px",
     width: "100%",
     background: "#13132a",
     border: "1px solid #1e2a50",
     borderRadius: "12px",
-    padding: "24px",
+    padding: "24px 28px",
     color: "#eaeaf5",
     fontFamily: "system-ui, -apple-system, sans-serif",
   },
   title: {
     fontSize: "16px",
     fontWeight: "600" as const,
-    marginBottom: "16px",
+    marginBottom: "20px",
     color: "#eaeaf5",
+  },
+  sectionTitle: {
+    fontSize: "10px",
+    fontWeight: "600" as const,
+    textTransform: "uppercase" as const,
+    color: "#6b6b88",
+    letterSpacing: "1px",
+    marginTop: "14px",
+    marginBottom: "6px",
+    paddingBottom: "4px",
+    borderBottom: "1px solid #1e2a5060",
+  },
+  grid: {
+    display: "grid" as const,
+    gridTemplateColumns: "1fr 1fr",
+    gap: "2px 24px",
   },
   row: {
     display: "flex" as const,
     justifyContent: "space-between" as const,
     alignItems: "center" as const,
-    padding: "6px 0",
+    padding: "4px 0",
   },
   kbd: {
     background: "#1e2a50",
     borderRadius: "4px",
     padding: "2px 6px",
     fontFamily: "monospace",
-    fontSize: "12px",
+    fontSize: "11px",
     color: "#a5b4fc",
+    whiteSpace: "nowrap" as const,
   },
   description: {
-    fontSize: "13px",
+    fontSize: "12px",
     color: "#9ca3af",
+    marginLeft: "12px",
+  },
+  hint: {
+    fontSize: "11px",
+    color: "#50506a",
+    textAlign: "center" as const,
+    marginTop: "16px",
   },
 };
 
@@ -81,12 +139,22 @@ export function KeyboardShortcutsHelp({ onClose }: KeyboardShortcutsHelpProps) {
     <div style={styles.overlay}>
       <div ref={cardRef} style={styles.card}>
         <div style={styles.title}>Keyboard Shortcuts</div>
-        {shortcuts.map((s) => (
-          <div key={s.key} style={styles.row}>
-            <kbd style={styles.kbd}>{s.key}</kbd>
-            <span style={styles.description}>{s.description}</span>
+        {sections.map((section) => (
+          <div key={section.title}>
+            <div style={styles.sectionTitle}>{section.title}</div>
+            <div style={styles.grid}>
+              {section.shortcuts.map((s) => (
+                <div key={s.key} style={styles.row}>
+                  <kbd style={styles.kbd}>{s.key}</kbd>
+                  <span style={styles.description}>{s.description}</span>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
+        <div style={styles.hint}>
+          Press <kbd style={styles.kbd}>?</kbd> anytime to toggle this help
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "preact/hooks";
+import { useState, useEffect, useRef, useCallback } from "preact/hooks";
 import { Workspace, UntrackedWindow, NEW_WORKSPACE_COLORS } from "../shared/types";
 import {
   getWorkspaceList,
@@ -8,6 +8,8 @@ import {
   restoreWorkspace,
   deleteWorkspace,
   createWorkspace,
+  toggleLock,
+  toggleStar,
 } from "../shared/workspace-manager";
 import { exportData, importData } from "../shared/storage";
 import { Sidebar } from "./components/Sidebar";
@@ -164,6 +166,11 @@ export function DashboardApp() {
   const [inlineColor, setInlineColor] = useState("#4F46E5");
   const [historyOpen, setHistoryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+
+  // Selection mode state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const loadData = async () => {
     const [list, untracked] = await Promise.all([
@@ -225,6 +232,156 @@ export function DashboardApp() {
     setRenameTargetId(id);
   };
 
+  // Selection mode helpers
+  const toggleSelectionMode = useCallback(() => {
+    setSelectionMode((prev) => {
+      if (prev) setSelectedIds(new Set());
+      return !prev;
+    });
+  }, []);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    const allIds = new Set(workspaces.map((ws) => ws.id));
+    setSelectedIds(allIds);
+  }, [workspaces]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+  }, []);
+
+  // Mass action handlers
+  const handleMassSave = useCallback(async () => {
+    const activeSelected = workspaces.filter(
+      (ws) => selectedIds.has(ws.id) && ws.windowId !== null,
+    );
+    if (activeSelected.length === 0) return;
+    if (!window.confirm(`Save & close ${activeSelected.length} active workspace(s)?`)) return;
+    for (const ws of activeSelected) {
+      await saveWorkspaceToStorage(ws.id);
+    }
+    clearSelection();
+    await loadData();
+  }, [workspaces, selectedIds, clearSelection]);
+
+  const handleMassRestore = useCallback(async () => {
+    const savedSelected = workspaces.filter(
+      (ws) => selectedIds.has(ws.id) && ws.windowId === null,
+    );
+    if (savedSelected.length === 0) return;
+    if (!window.confirm(`Restore ${savedSelected.length} workspace(s)?`)) return;
+    for (const ws of savedSelected) {
+      await restoreWorkspace(ws.id);
+      // Small delay between restores to avoid overwhelming the browser
+      if (savedSelected.length > 1) {
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    }
+    clearSelection();
+    await loadData();
+  }, [workspaces, selectedIds, clearSelection]);
+
+  const handleMassDelete = useCallback(async () => {
+    const deletable = workspaces.filter(
+      (ws) => selectedIds.has(ws.id) && ws.windowId === null && !ws.locked,
+    );
+    if (deletable.length === 0) return;
+    for (const ws of deletable) {
+      await deleteWorkspace(ws.id);
+    }
+    clearSelection();
+    await loadData();
+  }, [workspaces, selectedIds, clearSelection]);
+
+  const handleMassLock = useCallback(async () => {
+    const targets = workspaces.filter(
+      (ws) => selectedIds.has(ws.id) && !ws.locked,
+    );
+    for (const ws of targets) {
+      await toggleLock(ws.id);
+    }
+    clearSelection();
+    await loadData();
+  }, [workspaces, selectedIds, clearSelection]);
+
+  const handleMassUnlock = useCallback(async () => {
+    const targets = workspaces.filter(
+      (ws) => selectedIds.has(ws.id) && ws.locked,
+    );
+    for (const ws of targets) {
+      await toggleLock(ws.id);
+    }
+    clearSelection();
+    await loadData();
+  }, [workspaces, selectedIds, clearSelection]);
+
+  const handleMassStar = useCallback(async () => {
+    const targets = workspaces.filter(
+      (ws) => selectedIds.has(ws.id) && !ws.starred,
+    );
+    for (const ws of targets) {
+      await toggleStar(ws.id);
+    }
+    clearSelection();
+    await loadData();
+  }, [workspaces, selectedIds, clearSelection]);
+
+  const handleSaveAllActive = useCallback(async () => {
+    const active = workspaces.filter((ws) => ws.windowId !== null);
+    if (active.length === 0) return;
+    if (!window.confirm(`Save & close all ${active.length} active workspace(s)?`)) return;
+    for (const ws of active) {
+      await saveWorkspaceToStorage(ws.id);
+    }
+    await loadData();
+  }, [workspaces]);
+
+  // Arrow key navigation
+  const handleNavigateWorkspace = useCallback(
+    (direction: "up" | "down") => {
+      if (workspaces.length === 0) return;
+      if (!selectedWorkspaceId) {
+        handleSelectWorkspace(workspaces[0].id);
+        return;
+      }
+      const idx = workspaces.findIndex((ws) => ws.id === selectedWorkspaceId);
+      if (idx === -1) {
+        handleSelectWorkspace(workspaces[0].id);
+        return;
+      }
+      const nextIdx =
+        direction === "up"
+          ? (idx - 1 + workspaces.length) % workspaces.length
+          : (idx + 1) % workspaces.length;
+      handleSelectWorkspace(workspaces[nextIdx].id);
+    },
+    [workspaces, selectedWorkspaceId],
+  );
+
+  const handleExport = async () => {
+    const json = await exportData();
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const date = new Date().toISOString().split("T")[0];
+    a.href = url;
+    a.download = `concise-backup-${date}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Keyboard shortcuts
   const { showHelpOverlay, setShowHelpOverlay } = useKeyboardShortcuts({
     workspaces,
@@ -258,19 +415,24 @@ export function DashboardApp() {
       }
     },
     onShowHelp: () => setShowHelpOverlay(true),
+    // New shortcut handlers
+    onToggleLock: (id: string) => {
+      toggleLock(id).then(() => loadData());
+    },
+    onToggleStar: (id: string) => {
+      toggleStar(id).then(() => loadData());
+    },
+    onFocusNotes: () => {
+      notesRef.current?.focus();
+    },
+    onExport: handleExport,
+    onToggleBackupHistory: () => setHistoryOpen((v) => !v),
+    onNavigateWorkspace: handleNavigateWorkspace,
+    onToggleSelectionMode: toggleSelectionMode,
+    isSelectionMode: selectionMode,
+    onSelectAll: selectAll,
+    onSaveAllActive: handleSaveAllActive,
   });
-
-  const handleExport = async () => {
-    const json = await exportData();
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const date = new Date().toISOString().split("T")[0];
-    a.href = url;
-    a.download = `concise-backup-${date}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   const handleImport = () => {
     fileInputRef.current?.click();
@@ -360,6 +522,17 @@ export function DashboardApp() {
         onDeleteWorkspace={handleSidebarDelete}
         onRenameWorkspace={handleSidebarRename}
         onShowHistory={() => setHistoryOpen(true)}
+        onShowHelp={() => setShowHelpOverlay(true)}
+        selectionMode={selectionMode}
+        selectedIds={selectedIds}
+        onToggleSelectionMode={toggleSelectionMode}
+        onToggleSelected={toggleSelected}
+        onMassSave={handleMassSave}
+        onMassRestore={handleMassRestore}
+        onMassDelete={handleMassDelete}
+        onMassLock={handleMassLock}
+        onMassUnlock={handleMassUnlock}
+        onMassStar={handleMassStar}
       />
 
       <div style={styles.mainArea}>
@@ -454,6 +627,7 @@ export function DashboardApp() {
               onRefresh={loadData}
               triggerRename={renameTargetId === selectedWorkspace.id}
               onRenameHandled={() => setRenameTargetId(null)}
+              notesRef={notesRef}
             />
           ) : selectedUntracked ? (
             <UntrackedWindowPanel
