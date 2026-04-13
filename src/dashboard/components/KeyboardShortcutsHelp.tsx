@@ -19,7 +19,7 @@ const sections: ShortcutSection[] = [
   {
     title: "Workspace Actions",
     shortcuts: [
-      { key: `${mod}+S`, description: "Save selected workspace" },
+      { key: "w", description: "Save selected workspace" },
       { key: `${mod}+Enter`, description: "Switch to workspace" },
       { key: "d", description: "Delete (saved only)" },
       { key: "r", description: "Restore (saved only)" },
@@ -33,7 +33,7 @@ const sections: ShortcutSection[] = [
     shortcuts: [
       { key: "m", description: "Toggle selection mode" },
       { key: `${mod}+A`, description: "Select all (in selection mode)" },
-      { key: `${mod}+Shift+S`, description: "Save all active" },
+      { key: "Shift+S", description: "Save all active" },
     ],
   },
   {
@@ -41,7 +41,7 @@ const sections: ShortcutSection[] = [
     shortcuts: [
       { key: "b", description: "Backup history" },
       { key: "e", description: "Export data" },
-      { key: `${mod}+N`, description: "New workspace" },
+      { key: "c", description: "New workspace" },
       { key: "?", description: "This help" },
       { key: "Esc", description: "Close / exit mode" },
     ],

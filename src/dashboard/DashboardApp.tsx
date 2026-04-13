@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "preact/hooks";
+import { useState, useEffect, useRef, useCallback, useMemo } from "preact/hooks";
 import { Workspace, UntrackedWindow, NEW_WORKSPACE_COLORS } from "../shared/types";
 import {
   getWorkspaceList,
@@ -17,7 +17,7 @@ import { WorkspaceDetail } from "./components/WorkspaceDetail";
 import { UntrackedWindowPanel } from "./components/UntrackedWindowPanel";
 import { CreateWorkspacePanel } from "./components/CreateWorkspacePanel";
 import { BackupHistoryPanel } from "./components/BackupHistoryPanel";
-import { CommandPalette } from "../popup/components/CommandPalette";
+import { CommandPalette, PaletteCommand } from "../popup/components/CommandPalette";
 import { KeyboardShortcutsHelp } from "./components/KeyboardShortcutsHelp";
 import { EmptyState } from "./components/EmptyState";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
@@ -438,6 +438,127 @@ export function DashboardApp() {
     fileInputRef.current?.click();
   };
 
+  // Command palette commands
+  const paletteCommands: PaletteCommand[] = useMemo(() => [
+    {
+      name: "new",
+      aliases: ["create"],
+      description: "Create a new workspace",
+      expectsArg: "text",
+      execute: async (name?: string) => {
+        if (!name?.trim()) {
+          setShowCreatePanel(true);
+          return;
+        }
+        const ws = await createWorkspace(name.trim(), "#4F46E5");
+        setSelectedWorkspaceId(ws.id);
+        await loadData();
+      },
+    },
+    {
+      name: "save",
+      description: "Save the selected workspace",
+      execute: async () => {
+        if (selectedWorkspaceId) {
+          const ws = workspaces.find((w) => w.id === selectedWorkspaceId);
+          if (ws && ws.windowId !== null) {
+            await saveWorkspaceToStorage(selectedWorkspaceId);
+            await loadData();
+          }
+        }
+      },
+    },
+    {
+      name: "save-all",
+      description: "Save all active workspaces",
+      execute: handleSaveAllActive,
+    },
+    {
+      name: "restore",
+      description: "Restore a saved workspace",
+      expectsArg: "workspace",
+      execute: async (id?: string) => {
+        if (id) {
+          await restoreWorkspace(id);
+          await loadData();
+        }
+      },
+    },
+    {
+      name: "switch",
+      description: "Switch to a workspace",
+      expectsArg: "workspace",
+      execute: async (id?: string) => {
+        if (id) {
+          await switchToWorkspace(id);
+          await loadData();
+        }
+      },
+    },
+    {
+      name: "delete",
+      description: "Delete a saved workspace",
+      expectsArg: "workspace",
+      execute: async (id?: string) => {
+        if (id) {
+          const ws = workspaces.find((w) => w.id === id);
+          if (ws && window.confirm(`Delete workspace "${ws.name}"?`)) {
+            await deleteWorkspace(id);
+            if (selectedWorkspaceId === id) setSelectedWorkspaceId(null);
+            await loadData();
+          }
+        }
+      },
+    },
+    {
+      name: "import",
+      description: "Import workspaces from a file",
+      execute: () => {
+        fileInputRef.current?.click();
+      },
+    },
+    {
+      name: "export",
+      description: "Export all workspace data",
+      execute: handleExport,
+    },
+    {
+      name: "backup",
+      aliases: ["history"],
+      description: "Open backup history",
+      execute: () => {
+        setHistoryOpen(true);
+      },
+    },
+    {
+      name: "lock",
+      description: "Toggle lock on selected workspace",
+      execute: async () => {
+        if (selectedWorkspaceId) {
+          await toggleLock(selectedWorkspaceId);
+          await loadData();
+        }
+      },
+    },
+    {
+      name: "star",
+      description: "Toggle star on selected workspace",
+      execute: async () => {
+        if (selectedWorkspaceId) {
+          await toggleStar(selectedWorkspaceId);
+          await loadData();
+        }
+      },
+    },
+    {
+      name: "help",
+      description: "Show keyboard shortcuts",
+      execute: () => {
+        setShowHelpOverlay(true);
+      },
+    },
+  ], [selectedWorkspaceId, workspaces, handleSaveAllActive, handleExport]);
+
   const handleFileSelected = async (e: Event) => {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -667,6 +788,7 @@ export function DashboardApp() {
           workspaces={workspaces}
           onClose={() => setPaletteOpen(false)}
           onRefresh={loadData}
+          commands={paletteCommands}
         />
       )}
 

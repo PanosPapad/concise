@@ -92,11 +92,6 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
           }
           return;
         }
-        if (e.key === "n") {
-          e.preventDefault();
-          actions.onOpenCreatePanel();
-          return;
-        }
         if (e.key === "a" && actions.isSelectionMode) {
           e.preventDefault();
           actions.onSelectAll();
@@ -142,6 +137,19 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
         return;
       }
 
+      // Shift+S: save all active (no Cmd needed)
+      if (e.key === "S" && e.shiftKey) {
+        e.preventDefault();
+        actions.onSaveAllActive();
+        return;
+      }
+
+      // c: open create panel (replaces Cmd+N which Chrome intercepts)
+      if (e.key === "c") {
+        actions.onOpenCreatePanel();
+        return;
+      }
+
       // Selection mode toggle
       if (e.key === "m") {
         actions.onToggleSelectionMode();
@@ -164,6 +172,13 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
         if (e.key === "r") {
           if (ws && ws.windowId === null) {
             actions.onRestoreWorkspace(actions.selectedWorkspaceId);
+          }
+          return;
+        }
+
+        if (e.key === "w") {
+          if (ws && ws.windowId !== null) {
+            actions.onSaveWorkspace(actions.selectedWorkspaceId);
           }
           return;
         }
