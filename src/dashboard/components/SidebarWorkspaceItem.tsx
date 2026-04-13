@@ -14,6 +14,9 @@ interface Props {
   onDragEnd: () => void;
   dropIndicator: "above" | "below" | null;
   dragColor: string | null;
+  selectionMode?: boolean;
+  isChecked?: boolean;
+  onToggleChecked?: () => void;
 }
 
 function itemStyle(
@@ -183,17 +186,31 @@ export function SidebarWorkspaceItem({
   onDragEnd,
   dropIndicator,
   dragColor,
+  selectionMode,
+  isChecked,
+  onToggleChecked,
 }: Props) {
   const [hovered, setHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const isActive = workspace.windowId !== null;
   const healthRatio = workspaceHealthRatio(workspace.tabs);
 
+  const handleClick = () => {
+    if (selectionMode && onToggleChecked) {
+      onToggleChecked();
+    } else {
+      onClick();
+    }
+  };
+
   return (
     <div
-      draggable={true}
-      style={itemStyle(isSelected, hovered, isDragging, workspace.color, dropIndicator, dragColor)}
-      onClick={onClick}
+      draggable={!selectionMode}
+      style={{
+        ...itemStyle(isSelected && !selectionMode, hovered, isDragging, workspace.color, dropIndicator, dragColor),
+        cursor: selectionMode ? "pointer" : undefined,
+      }}
+      onClick={handleClick}
       onContextMenu={(e: MouseEvent) => {
         if (onContextMenu) {
           e.preventDefault();
@@ -227,6 +244,29 @@ export function SidebarWorkspaceItem({
         onDragEnd();
       }}
     >
+      {selectionMode && (
+        <div
+          style={{
+            width: "14px",
+            height: "14px",
+            borderRadius: "3px",
+            border: isChecked ? "none" : "1.5px solid #3a4a70",
+            backgroundColor: isChecked ? "#4F46E5" : "transparent",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: "0",
+            transition: "background-color 0.1s",
+            cursor: "pointer",
+          }}
+        >
+          {isChecked && (
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M2 5L4.5 7.5L8 3" stroke="#eaeaf5" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </div>
+      )}
       <HealthRing ratio={healthRatio} color={workspace.color} isActive={isActive} />
       {workspace.starred && <span style={styles.starIndicator}>★</span>}
       <div style={styles.infoColumn}>

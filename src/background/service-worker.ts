@@ -5,8 +5,13 @@ import {
   saveWorkspace,
   saveAllWorkspaces,
   pushBackup,
+  validateAndRepairStorage,
+  getStorageUsage,
+  broadcastStorageError,
+  withWriteLock,
+  getPreferences,
 } from '../shared/storage';
-import { snapshotTabs, getWorkspaceList } from '../shared/workspace-manager';
+import { snapshotTabs, getWorkspaceList, isRestorableUrl, restoreWorkspace } from '../shared/workspace-manager';
 
 console.log('Concise service worker loaded');
 
@@ -66,22 +71,70 @@ async function findWorkspaceByWindowId(
 
 async function syncTabsForWindow(windowId: number): Promise<void> {
   try {
-    const result = await findWorkspaceByWindowId(windowId);
-    if (!result) return;
+    await withWriteLock(async () => {
+      const allWorkspaces = await getAllWorkspaces();
+      const workspace = Object.values(allWorkspaces).find(ws => ws.windowId === windowId);
+      if (!workspace) return;
 
-    const { workspace } = result;
-    const tabs = await snapshotTabs(windowId, workspace.tabs);
-
-    const freshWorkspaces = await getAllWorkspaces();
-    const freshWorkspace = freshWorkspaces[workspace.id];
-    if (!freshWorkspace || freshWorkspace.windowId !== windowId) return;
-
-    freshWorkspace.tabs = tabs;
-    freshWorkspaces[workspace.id] = freshWorkspace;
-    await saveAllWorkspaces(freshWorkspaces);
+      const tabs = await snapshotTabs(windowId, workspace.tabs);
+      workspace.tabs = tabs;
+      allWorkspaces[workspace.id] = workspace;
+      await saveAllWorkspaces(allWorkspaces);
+    });
   } catch (error) {
     console.error(`[Concise] Failed to sync tabs for window ${windowId}:`, error);
   }
+}
+
+// --- Auto-restore on startup ---
+
+const AUTO_RESTORE_TAB_LIMIT = 30;
+
+async function autoRestorePreviousWorkspaces(ids: string[]): Promise<void> {
+  const workspaces = await getAllWorkspaces();
+  const toRestore = ids
+    .map(id => workspaces[id])
+    .filter((ws): ws is Workspace => ws !== undefined)
+    .filter(ws => ws.tabs.some(t => isRestorableUrl(t.url)));
+
+  const totalTabs = toRestore.reduce(
+    (sum, ws) => sum + ws.tabs.filter(t => isRestorableUrl(t.url)).length, 0
+  );
+
+  if (totalTabs === 0) return;
+
+  if (totalTabs > AUTO_RESTORE_TAB_LIMIT) {
+    await chrome.storage.local.set({
+      _pendingRestore: {
+        workspaceIds: toRestore.map(ws => ws.id),
+        totalTabs,
+        timestamp: Date.now(),
+      },
+    });
+    console.log(`[Concise] ${toRestore.length} workspaces (${totalTabs} tabs) pending user confirmation`);
+    return;
+  }
+
+  const result = { restored: [] as string[], failed: [] as string[] };
+  for (const ws of toRestore) {
+    try {
+      await restoreWorkspace(ws.id);
+      result.restored.push(ws.name);
+      await new Promise(r => setTimeout(r, 500));
+    } catch (err) {
+      result.failed.push(ws.name);
+      console.error(`[Concise] Failed to auto-restore "${ws.name}":`, err);
+    }
+  }
+
+  await chrome.storage.local.set({
+    _lastAutoRestore: {
+      restored: result.restored,
+      failed: result.failed,
+      timestamp: Date.now(),
+    },
+  });
+  console.log(`[Concise] Auto-restored ${result.restored.length} workspaces`);
 }
 
 // --- Window close handler ---
@@ -143,21 +196,22 @@ chrome.tabs.onAttached.addListener((_tabId, attachInfo) => {
 
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
-    const result = await findWorkspaceByWindowId(activeInfo.windowId);
-    if (!result) return;
+    await withWriteLock(async () => {
+      const allWorkspaces = await getAllWorkspaces();
+      const workspace = Object.values(allWorkspaces).find(ws => ws.windowId === activeInfo.windowId);
+      if (!workspace) return;
 
-    const { workspace, allWorkspaces } = result;
-    const tab = await chrome.tabs.get(activeInfo.tabId);
-    const url = tab.url ?? '';
+      const tab = await chrome.tabs.get(activeInfo.tabId);
+      const url = tab.url ?? '';
+      if (!url || url.startsWith('chrome://') || url.startsWith('chrome-extension://')) return;
 
-    if (!url || url.startsWith('chrome://') || url.startsWith('chrome-extension://')) return;
-
-    const matchIdx = workspace.tabs.findIndex((t) => t.url === url);
-    if (matchIdx !== -1) {
-      workspace.tabs[matchIdx].lastActivatedAt = Date.now();
-      allWorkspaces[workspace.id] = workspace;
-      await saveAllWorkspaces(allWorkspaces);
-    }
+      const matchIdx = workspace.tabs.findIndex((t) => t.url === url);
+      if (matchIdx !== -1) {
+        workspace.tabs[matchIdx].lastActivatedAt = Date.now();
+        allWorkspaces[workspace.id] = workspace;
+        await saveAllWorkspaces(allWorkspaces);
+      }
+    });
   } catch (error) {
     console.error('[Concise] Failed to track tab activation:', error);
   }
@@ -165,15 +219,34 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 
 // --- Extension install handler ---
 
-chrome.runtime.onInstalled.addListener((details) => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   console.log(`[Concise] Extension ${details.reason}: version ${chrome.runtime.getManifest().version}`);
+  const report = await validateAndRepairStorage();
+  if (!report.valid) {
+    console.warn('[Concise] Storage integrity issues:', report);
+  }
   chrome.alarms.create('concise-auto-backup', {
     delayInMinutes: 30,
     periodInMinutes: 30,
   });
 });
 
-chrome.runtime.onStartup.addListener(() => {
+chrome.runtime.onStartup.addListener(async () => {
+  const report = await validateAndRepairStorage();
+  if (!report.valid) {
+    console.warn('[Concise] Storage integrity issues:', report);
+    await broadcastStorageError(
+      `Storage repaired on startup: ${report.repaired.length} fix(es), ${report.errors.length} error(s)`
+    );
+  }
+
+  if (report.previouslyActive.length > 0) {
+    const prefs = await getPreferences();
+    if (prefs.autoRestoreOnStartup) {
+      await autoRestorePreviousWorkspaces(report.previouslyActive);
+    }
+  }
+
   chrome.alarms.create('concise-auto-backup', {
     delayInMinutes: 30,
     periodInMinutes: 30,
@@ -187,8 +260,17 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (Object.keys(workspaces).length === 0) return;
     await pushBackup(workspaces);
     console.log('[Concise] Auto-backup saved');
+
+    // Check storage quota
+    const usage = await getStorageUsage();
+    if (usage.percentUsed > 80) {
+      await broadcastStorageError(
+        `Storage usage at ${usage.percentUsed}% (${Math.round(usage.bytesUsed / 1024)}KB of ${Math.round(usage.bytesTotal / 1024)}KB)`
+      );
+    }
   } catch (error) {
     console.error('[Concise] Auto-backup failed:', error);
+    await broadcastStorageError('Auto-backup failed: ' + (error instanceof Error ? error.message : String(error)));
   }
 });
 

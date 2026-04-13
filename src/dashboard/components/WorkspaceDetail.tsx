@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "preact/hooks";
+import { Ref } from "preact";
 import { Workspace, SavedTab } from "../../shared/types";
 import {
   switchToWorkspace,
@@ -27,6 +28,7 @@ interface Props {
   onRefresh: () => void;
   triggerRename?: boolean;
   onRenameHandled?: () => void;
+  notesRef?: Ref<HTMLTextAreaElement>;
 }
 
 const styles = {
@@ -196,7 +198,7 @@ const styles = {
   },
 };
 
-export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh, triggerRename, onRenameHandled }: Props) {
+export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh, triggerRename, onRenameHandled, notesRef }: Props) {
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(workspace.name);
@@ -528,6 +530,7 @@ export function WorkspaceDetail({ workspace, allWorkspaces, isCurrent, onRefresh
       <div style={styles.notesSection}>
         <span style={styles.notesLabel}>Notes</span>
         <textarea
+          ref={notesRef}
           style={styles.notesTextarea}
           placeholder="Add context for this workspace..."
           value={notesValue}

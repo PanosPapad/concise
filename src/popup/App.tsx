@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "preact/hooks";
 import { Workspace, UntrackedWindow } from "../shared/types";
-import { getWorkspaceList, getUntrackedWindows } from "../shared/workspace-manager";
-import { exportData, importData } from "../shared/storage";
+import { getWorkspaceList, getUntrackedWindows, panicRestoreAll } from "../shared/workspace-manager";
+import { exportData, importData, getAllWorkspaces } from "../shared/storage";
 import { WorkspaceList } from "./components/WorkspaceList";
 import { CreateWorkspace } from "./components/CreateWorkspace";
 import { CommandPalette } from "./components/CommandPalette";
@@ -125,6 +125,25 @@ export function App() {
     fileInputRef.current?.click();
   };
 
+  const handlePanicRestore = async () => {
+    const all = await getAllWorkspaces();
+    const saved = Object.values(all).filter(ws => ws.windowId === null);
+    const tabCount = saved.reduce((sum, ws) => sum + ws.tabs.length, 0);
+
+    if (saved.length === 0) { window.alert('No saved workspaces to restore.'); return; }
+    if (!window.confirm(`Restore ALL ${saved.length} saved workspaces (${tabCount} tabs) as Chrome windows?`)) return;
+
+    try {
+      const result = await panicRestoreAll();
+      await loadData();
+      if (result.failed.length > 0) {
+        window.alert(`Restored ${result.restored.length}, failed: ${result.failed.map(f => f.name).join(', ')}`);
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Panic restore failed');
+    }
+  };
+
   const handleFileSelected = async (e: Event) => {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -177,6 +196,21 @@ export function App() {
         />
       </div>
       <div style={styles.footer}>
+        <button
+          onClick={handlePanicRestore}
+          title="Restore all saved workspaces as windows"
+          style={{
+            background: 'rgba(220, 38, 38, 0.15)',
+            border: '1px solid rgba(220, 38, 38, 0.3)',
+            borderRadius: '4px',
+            color: '#fca5a5',
+            fontSize: '11px',
+            cursor: 'pointer',
+            padding: '4px 8px',
+          }}
+        >
+          Restore All
+        </button>
         <button style={styles.footerBtn} onClick={handleExport}>
           Export
         </button>

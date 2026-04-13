@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "preact/hooks";
+import { useState, useEffect, useRef, useCallback, useMemo } from "preact/hooks";
 import { Workspace, UntrackedWindow, NEW_WORKSPACE_COLORS } from "../shared/types";
 import {
   getWorkspaceList,
@@ -8,14 +8,17 @@ import {
   restoreWorkspace,
   deleteWorkspace,
   createWorkspace,
+  toggleLock,
+  toggleStar,
+  panicRestoreAll,
 } from "../shared/workspace-manager";
-import { exportData, importData } from "../shared/storage";
+import { exportData, importData, exportAsBookmarksHtml, getStorageUsage, getAllWorkspaces, getPreferences, setPreferences } from "../shared/storage";
 import { Sidebar } from "./components/Sidebar";
 import { WorkspaceDetail } from "./components/WorkspaceDetail";
 import { UntrackedWindowPanel } from "./components/UntrackedWindowPanel";
 import { CreateWorkspacePanel } from "./components/CreateWorkspacePanel";
 import { BackupHistoryPanel } from "./components/BackupHistoryPanel";
-import { CommandPalette } from "../popup/components/CommandPalette";
+import { CommandPalette, PaletteCommand } from "../popup/components/CommandPalette";
 import { KeyboardShortcutsHelp } from "./components/KeyboardShortcutsHelp";
 import { EmptyState } from "./components/EmptyState";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
@@ -163,7 +166,14 @@ export function DashboardApp() {
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [inlineColor, setInlineColor] = useState("#4F46E5");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [storagePercent, setStoragePercent] = useState(0);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+
+  // Selection mode state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const loadData = async () => {
     const [list, untracked] = await Promise.all([
@@ -181,10 +191,51 @@ export function DashboardApp() {
     });
   }, []);
 
-  // Live updates when storage changes
+  // Live updates + storage usage + error listeners (single onChanged listener)
   useEffect(() => {
-    const listener = () => {
-      loadData();
+    getStorageUsage().then(u => setStoragePercent(u.percentUsed)).catch(() => {});
+
+    // Check for pending restore prompt on mount
+    chrome.storage.local.get('_pendingRestore').then(r => {
+      const pending = r._pendingRestore;
+      if (pending) {
+        const doRestore = window.confirm(
+          `${pending.workspaceIds.length} workspaces (${pending.totalTabs} tabs) were open before Chrome closed.\n\nRestore them all?`
+        );
+        if (doRestore) {
+          panicRestoreAll().then(() => loadData());
+        }
+        chrome.storage.local.remove('_pendingRestore');
+      }
+    });
+
+    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if (changes.workspaces) {
+        loadData();
+      }
+      if (changes._lastStorageError?.newValue) {
+        setStorageError(changes._lastStorageError.newValue.message);
+        setTimeout(() => setStorageError(null), 10000);
+      }
+      if (changes._pendingRestore?.newValue) {
+        const { workspaceIds, totalTabs } = changes._pendingRestore.newValue;
+        const doRestore = window.confirm(
+          `${workspaceIds.length} workspaces (${totalTabs} tabs) were open before Chrome closed.\n\nRestore them all?`
+        );
+        if (doRestore) {
+          panicRestoreAll().then(() => loadData());
+        }
+        chrome.storage.local.remove('_pendingRestore');
+      }
+      if (changes._lastAutoRestore?.newValue) {
+        const { restored, failed } = changes._lastAutoRestore.newValue;
+        if (failed.length > 0) {
+          setStorageError(`Auto-restored ${restored.length} workspaces. Failed: ${failed.join(', ')}`);
+        }
+        chrome.storage.local.remove('_lastAutoRestore');
+        loadData();
+      }
+      getStorageUsage().then(u => setStoragePercent(u.percentUsed)).catch(() => {});
     };
     chrome.storage.onChanged.addListener(listener);
     return () => chrome.storage.onChanged.removeListener(listener);
@@ -225,8 +276,210 @@ export function DashboardApp() {
     setRenameTargetId(id);
   };
 
+  // Clear selection when leaving selection mode
+  useEffect(() => {
+    if (!selectionMode) {
+      setSelectedIds(new Set());
+    }
+  }, [selectionMode]);
+
+  // Selection mode helpers
+  const toggleSelectionMode = useCallback(() => {
+    setSelectionMode((prev) => !prev);
+  }, []);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const filteredWorkspaces = useMemo(
+    () =>
+      searchQuery.trim()
+        ? workspaces.filter((ws) =>
+            ws.name.toLowerCase().includes(searchQuery.toLowerCase()),
+          )
+        : workspaces,
+    [workspaces, searchQuery],
+  );
+
+  const selectAll = useCallback(() => {
+    const allIds = new Set(filteredWorkspaces.map((ws) => ws.id));
+    setSelectedIds(allIds);
+  }, [filteredWorkspaces]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+  }, []);
+
+  // Mass action handlers
+  const handleMassSave = useCallback(async () => {
+    const activeSelected = workspaces.filter(
+      (ws) => selectedIds.has(ws.id) && ws.windowId !== null,
+    );
+    if (activeSelected.length === 0) return;
+    if (!window.confirm(`Save & close ${activeSelected.length} active workspace(s)?`)) return;
+    for (const ws of activeSelected) {
+      await saveWorkspaceToStorage(ws.id);
+    }
+    clearSelection();
+    await loadData();
+  }, [workspaces, selectedIds, clearSelection]);
+
+  const handleMassRestore = useCallback(async () => {
+    const savedSelected = workspaces.filter(
+      (ws) => selectedIds.has(ws.id) && ws.windowId === null,
+    );
+    if (savedSelected.length === 0) return;
+    if (!window.confirm(`Restore ${savedSelected.length} workspace(s)?`)) return;
+    for (const ws of savedSelected) {
+      await restoreWorkspace(ws.id);
+      // Small delay between restores to avoid overwhelming the browser
+      if (savedSelected.length > 1) {
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    }
+    clearSelection();
+    await loadData();
+  }, [workspaces, selectedIds, clearSelection]);
+
+  const handleMassDelete = useCallback(async () => {
+    const deletable = workspaces.filter(
+      (ws) => selectedIds.has(ws.id) && ws.windowId === null && !ws.locked,
+    );
+    if (deletable.length === 0) return;
+    for (const ws of deletable) {
+      await deleteWorkspace(ws.id);
+    }
+    clearSelection();
+    await loadData();
+  }, [workspaces, selectedIds, clearSelection]);
+
+  const handleMassLock = useCallback(async () => {
+    const targets = workspaces.filter(
+      (ws) => selectedIds.has(ws.id) && !ws.locked,
+    );
+    for (const ws of targets) {
+      await toggleLock(ws.id);
+    }
+    clearSelection();
+    await loadData();
+  }, [workspaces, selectedIds, clearSelection]);
+
+  const handleMassUnlock = useCallback(async () => {
+    const targets = workspaces.filter(
+      (ws) => selectedIds.has(ws.id) && ws.locked,
+    );
+    for (const ws of targets) {
+      await toggleLock(ws.id);
+    }
+    clearSelection();
+    await loadData();
+  }, [workspaces, selectedIds, clearSelection]);
+
+  const handleMassStar = useCallback(async () => {
+    const targets = workspaces.filter(
+      (ws) => selectedIds.has(ws.id) && !ws.starred,
+    );
+    for (const ws of targets) {
+      await toggleStar(ws.id);
+    }
+    clearSelection();
+    await loadData();
+  }, [workspaces, selectedIds, clearSelection]);
+
+  const handleSaveAllActive = useCallback(async () => {
+    const active = workspaces.filter((ws) => ws.windowId !== null);
+    if (active.length === 0) return;
+    if (!window.confirm(`Save & close all ${active.length} active workspace(s)?`)) return;
+    for (const ws of active) {
+      await saveWorkspaceToStorage(ws.id);
+    }
+    await loadData();
+  }, [workspaces]);
+
+  // Arrow key navigation
+  const handleNavigateWorkspace = useCallback(
+    (direction: "up" | "down") => {
+      if (filteredWorkspaces.length === 0) return;
+      if (!selectedWorkspaceId) {
+        handleSelectWorkspace(filteredWorkspaces[0].id);
+        return;
+      }
+      const idx = filteredWorkspaces.findIndex((ws) => ws.id === selectedWorkspaceId);
+      if (idx === -1) {
+        handleSelectWorkspace(filteredWorkspaces[0].id);
+        return;
+      }
+      const nextIdx =
+        direction === "up"
+          ? (idx - 1 + filteredWorkspaces.length) % filteredWorkspaces.length
+          : (idx + 1) % filteredWorkspaces.length;
+      handleSelectWorkspace(filteredWorkspaces[nextIdx].id);
+    },
+    [filteredWorkspaces, selectedWorkspaceId],
+  );
+
+  const handleExport = async () => {
+    const json = await exportData();
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const date = new Date().toISOString().split("T")[0];
+    a.href = url;
+    a.download = `concise-backup-${date}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePanicRestore = async () => {
+    const all = await getAllWorkspaces();
+    const saved = Object.values(all).filter(ws => ws.windowId === null);
+    const tabCount = saved.reduce((sum, ws) => sum + ws.tabs.length, 0);
+
+    if (saved.length === 0) {
+      window.alert('No saved workspaces to restore.');
+      return;
+    }
+
+    if (!window.confirm(
+      `Restore ALL ${saved.length} saved workspaces as Chrome windows?\n\nThis will open ${saved.length} windows with ${tabCount} total tabs.`
+    )) return;
+
+    try {
+      const result = await panicRestoreAll();
+      await loadData();
+      if (result.failed.length > 0) {
+        window.alert(
+          `Restored ${result.restored.length} workspaces (${result.totalTabs} tabs).\n\nFailed: ${result.failed.map(f => f.name).join(', ')}`
+        );
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Panic restore failed');
+    }
+  };
+
+  const handleExportBookmarks = async () => {
+    const html = await exportAsBookmarksHtml();
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `concise-bookmarks-${new Date().toISOString().split('T')[0]}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Keyboard shortcuts
-  const { showHelpOverlay, setShowHelpOverlay } = useKeyboardShortcuts({
+  const shortcutActions = useMemo(() => ({
     workspaces,
     selectedWorkspaceId,
     onSelectWorkspace: handleSelectWorkspace,
@@ -257,24 +510,177 @@ export function DashboardApp() {
         });
       }
     },
-    onShowHelp: () => setShowHelpOverlay(true),
-  });
+    onToggleLock: (id: string) => {
+      toggleLock(id).then(() => loadData());
+    },
+    onToggleStar: (id: string) => {
+      toggleStar(id).then(() => loadData());
+    },
+    onFocusNotes: () => {
+      notesRef.current?.focus();
+    },
+    onExport: handleExport,
+    onToggleBackupHistory: () => setHistoryOpen((v) => !v),
+    onNavigateWorkspace: handleNavigateWorkspace,
+    onToggleSelectionMode: toggleSelectionMode,
+    isSelectionMode: selectionMode,
+    onSelectAll: selectAll,
+    onSaveAllActive: handleSaveAllActive,
+  }), [
+    workspaces, selectedWorkspaceId, paletteOpen, showCreatePanel,
+    handleExport, handleNavigateWorkspace, toggleSelectionMode,
+    selectionMode, selectAll, handleSaveAllActive,
+  ]);
 
-  const handleExport = async () => {
-    const json = await exportData();
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const date = new Date().toISOString().split("T")[0];
-    a.href = url;
-    a.download = `concise-backup-${date}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const { showHelpOverlay, setShowHelpOverlay } = useKeyboardShortcuts(shortcutActions);
 
   const handleImport = () => {
     fileInputRef.current?.click();
   };
+
+  // Command palette commands
+  const paletteCommands: PaletteCommand[] = useMemo(() => [
+    {
+      name: "new",
+      aliases: ["create"],
+      description: "Create a new workspace",
+      expectsArg: "text",
+      execute: async (name?: string) => {
+        if (!name?.trim()) {
+          setShowCreatePanel(true);
+          return;
+        }
+        const ws = await createWorkspace(name.trim(), "#4F46E5");
+        setSelectedWorkspaceId(ws.id);
+        await loadData();
+      },
+    },
+    {
+      name: "save",
+      description: "Save the selected workspace",
+      execute: async () => {
+        if (selectedWorkspaceId) {
+          const ws = workspaces.find((w) => w.id === selectedWorkspaceId);
+          if (ws && ws.windowId !== null) {
+            await saveWorkspaceToStorage(selectedWorkspaceId);
+            await loadData();
+          }
+        }
+      },
+    },
+    {
+      name: "save-all",
+      description: "Save all active workspaces",
+      execute: handleSaveAllActive,
+    },
+    {
+      name: "restore",
+      description: "Restore a saved workspace",
+      expectsArg: "workspace",
+      execute: async (id?: string) => {
+        if (id) {
+          await restoreWorkspace(id);
+          await loadData();
+        }
+      },
+    },
+    {
+      name: "switch",
+      description: "Switch to a workspace",
+      expectsArg: "workspace",
+      execute: async (id?: string) => {
+        if (id) {
+          await switchToWorkspace(id);
+          await loadData();
+        }
+      },
+    },
+    {
+      name: "delete",
+      description: "Delete a saved workspace",
+      expectsArg: "workspace",
+      execute: async (id?: string) => {
+        if (id) {
+          const ws = workspaces.find((w) => w.id === id);
+          if (ws && window.confirm(`Delete workspace "${ws.name}"?`)) {
+            await deleteWorkspace(id);
+            if (selectedWorkspaceId === id) setSelectedWorkspaceId(null);
+            await loadData();
+          }
+        }
+      },
+    },
+    {
+      name: "import",
+      description: "Import workspaces from a file",
+      execute: () => {
+        fileInputRef.current?.click();
+      },
+    },
+    {
+      name: "export",
+      description: "Export all workspace data",
+      execute: handleExport,
+    },
+    {
+      name: "backup",
+      aliases: ["history"],
+      description: "Open backup history",
+      execute: () => {
+        setHistoryOpen(true);
+      },
+    },
+    {
+      name: "lock",
+      description: "Toggle lock on selected workspace",
+      execute: async () => {
+        if (selectedWorkspaceId) {
+          await toggleLock(selectedWorkspaceId);
+          await loadData();
+        }
+      },
+    },
+    {
+      name: "star",
+      description: "Toggle star on selected workspace",
+      execute: async () => {
+        if (selectedWorkspaceId) {
+          await toggleStar(selectedWorkspaceId);
+          await loadData();
+        }
+      },
+    },
+    {
+      name: "help",
+      description: "Show keyboard shortcuts",
+      execute: () => {
+        setShowHelpOverlay(true);
+      },
+    },
+    {
+      name: "panic-restore",
+      aliases: ["restore-all", "emergency"],
+      description: "Restore ALL saved workspaces as Chrome windows",
+      execute: handlePanicRestore,
+    },
+    {
+      name: "export-bookmarks",
+      aliases: ["bookmarks"],
+      description: "Export all workspaces as browser bookmarks HTML",
+      execute: handleExportBookmarks,
+    },
+    {
+      name: "auto-restore",
+      aliases: ["settings"],
+      description: "Toggle auto-restore workspaces on Chrome startup",
+      execute: async () => {
+        const prefs = await getPreferences();
+        const newVal = !prefs.autoRestoreOnStartup;
+        await setPreferences({ ...prefs, autoRestoreOnStartup: newVal });
+        window.alert(`Auto-restore on startup: ${newVal ? 'ON' : 'OFF'}`);
+      },
+    },
+  ], [selectedWorkspaceId, workspaces, handleSaveAllActive, handleExport, handlePanicRestore, handleExportBookmarks]);
 
   const handleFileSelected = async (e: Event) => {
     const input = e.target as HTMLInputElement;
@@ -335,14 +741,20 @@ export function DashboardApp() {
     (uw) => uw.windowId === selectedUntrackedId,
   );
 
-  const filteredWorkspaces = searchQuery.trim()
-    ? workspaces.filter((ws) =>
-        ws.name.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : workspaces;
-
   return (
     <div style={styles.container}>
+      {storageError && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 10000,
+          padding: '10px 16px', backgroundColor: '#dc2626', color: '#fff',
+          fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <span>{storageError}</span>
+          <button onClick={() => setStorageError(null)} style={{
+            background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '16px',
+          }}>×</button>
+        </div>
+      )}
       <Sidebar
         workspaces={filteredWorkspaces}
         untrackedWindows={untrackedWindows}
@@ -360,6 +772,19 @@ export function DashboardApp() {
         onDeleteWorkspace={handleSidebarDelete}
         onRenameWorkspace={handleSidebarRename}
         onShowHistory={() => setHistoryOpen(true)}
+        onShowHelp={() => setShowHelpOverlay(true)}
+        selectionMode={selectionMode}
+        selectedIds={selectedIds}
+        onToggleSelectionMode={toggleSelectionMode}
+        onToggleSelected={toggleSelected}
+        onMassSave={handleMassSave}
+        onMassRestore={handleMassRestore}
+        onMassDelete={handleMassDelete}
+        onMassLock={handleMassLock}
+        onMassUnlock={handleMassUnlock}
+        onMassStar={handleMassStar}
+        storagePercent={storagePercent}
+        onExportBookmarks={handleExportBookmarks}
       />
 
       <div style={styles.mainArea}>
@@ -454,6 +879,7 @@ export function DashboardApp() {
               onRefresh={loadData}
               triggerRename={renameTargetId === selectedWorkspace.id}
               onRenameHandled={() => setRenameTargetId(null)}
+              notesRef={notesRef}
             />
           ) : selectedUntracked ? (
             <UntrackedWindowPanel
@@ -493,6 +919,7 @@ export function DashboardApp() {
           workspaces={workspaces}
           onClose={() => setPaletteOpen(false)}
           onRefresh={loadData}
+          commands={paletteCommands}
         />
       )}
 

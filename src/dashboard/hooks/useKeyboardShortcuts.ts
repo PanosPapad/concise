@@ -15,7 +15,18 @@ export interface ShortcutActions {
   onSwitchWorkspace: (id: string) => void;
   onRestoreWorkspace: (id: string) => void;
   onDeleteWorkspace: (id: string) => void;
-  onShowHelp: () => void;
+  // New shortcuts
+  onToggleLock: (id: string) => void;
+  onToggleStar: (id: string) => void;
+  onFocusNotes: () => void;
+  onExport: () => void;
+  onToggleBackupHistory: () => void;
+  onNavigateWorkspace: (direction: "up" | "down") => void;
+  // Selection mode
+  onToggleSelectionMode: () => void;
+  isSelectionMode: boolean;
+  onSelectAll: () => void;
+  onSaveAllActive: () => void;
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -35,6 +46,10 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
 
       // Escape always works, even in inputs
       if (e.key === "Escape") {
+        if (actions.isSelectionMode) {
+          actions.onToggleSelectionMode();
+          return;
+        }
         if (showHelpOverlay) {
           setShowHelpOverlay(false);
           return;
@@ -52,18 +67,6 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
 
       // Cmd/Ctrl combos work even in inputs
       if (e.metaKey || e.ctrlKey) {
-        if (e.key === "s") {
-          e.preventDefault();
-          if (actions.selectedWorkspaceId) {
-            const ws = actions.workspaces.find(
-              (w) => w.id === actions.selectedWorkspaceId,
-            );
-            if (ws && ws.windowId !== null) {
-              actions.onSaveWorkspace(actions.selectedWorkspaceId);
-            }
-          }
-          return;
-        }
         if (e.key === "Enter") {
           e.preventDefault();
           if (actions.selectedWorkspaceId) {
@@ -71,9 +74,9 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
           }
           return;
         }
-        if (e.key === "n") {
+        if (e.key === "a" && actions.isSelectionMode) {
           e.preventDefault();
-          actions.onOpenCreatePanel();
+          actions.onSelectAll();
           return;
         }
         return;
@@ -90,7 +93,19 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
 
       if (e.key === "?") {
         e.preventDefault();
-        setShowHelpOverlay(true);
+        setShowHelpOverlay((v) => !v);
+        return;
+      }
+
+      // Arrow key navigation
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        actions.onNavigateWorkspace("up");
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        actions.onNavigateWorkspace("down");
         return;
       }
 
@@ -104,27 +119,77 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
         return;
       }
 
-      if (e.key === "d") {
-        if (actions.selectedWorkspaceId) {
-          const ws = actions.workspaces.find(
-            (w) => w.id === actions.selectedWorkspaceId,
-          );
-          if (ws && ws.windowId === null) {
-            actions.onDeleteWorkspace(actions.selectedWorkspaceId);
-          }
-        }
+      const key = e.key.toLowerCase();
+
+      // Shift+S: save all active (no Cmd needed)
+      if (key === "s" && e.shiftKey) {
+        e.preventDefault();
+        actions.onSaveAllActive();
         return;
       }
 
-      if (e.key === "r") {
-        if (actions.selectedWorkspaceId) {
-          const ws = actions.workspaces.find(
-            (w) => w.id === actions.selectedWorkspaceId,
-          );
+      // c: open create panel (replaces Cmd+N which Chrome intercepts)
+      if (key === "c") {
+        actions.onOpenCreatePanel();
+        return;
+      }
+
+      // Selection mode toggle
+      if (key === "m") {
+        actions.onToggleSelectionMode();
+        return;
+      }
+
+      // Single-key workspace actions (require selection)
+      if (actions.selectedWorkspaceId) {
+        const ws = actions.workspaces.find(
+          (w) => w.id === actions.selectedWorkspaceId,
+        );
+
+        if (key === "d") {
+          if (ws && ws.windowId === null) {
+            actions.onDeleteWorkspace(actions.selectedWorkspaceId);
+          }
+          return;
+        }
+
+        if (key === "r") {
           if (ws && ws.windowId === null) {
             actions.onRestoreWorkspace(actions.selectedWorkspaceId);
           }
+          return;
         }
+
+        if (key === "w") {
+          if (ws && ws.windowId !== null) {
+            actions.onSaveWorkspace(actions.selectedWorkspaceId);
+          }
+          return;
+        }
+
+        if (key === "l") {
+          actions.onToggleLock(actions.selectedWorkspaceId);
+          return;
+        }
+
+        if (key === "s") {
+          actions.onToggleStar(actions.selectedWorkspaceId);
+          return;
+        }
+
+        if (key === "n") {
+          actions.onFocusNotes();
+          return;
+        }
+      }
+
+      if (key === "e") {
+        actions.onExport();
+        return;
+      }
+
+      if (key === "b") {
+        actions.onToggleBackupHistory();
         return;
       }
     },
